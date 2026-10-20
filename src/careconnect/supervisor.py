@@ -2,7 +2,7 @@
 
 import uuid
 
-from careconnect.safety_gate import classify, mask_pii
+from careconnect.safety_gate import classify, mask_pii, sanitize_retrieved
 
 NO_ANSWER = "I could not find an approved answer to that."
 
@@ -18,7 +18,8 @@ def supervisor_flow(request, knowledge_base, ticket_store):
         return {**outcome, "decision": "escalate", "reply": reply, "escalation": ticket}
     if gate["injection"]:
         return {**outcome, "decision": "block", "reply": "I can't help with that request."}
-    hits = knowledge_base.retrieve(request)
+    hits = [(name, sanitize_retrieved(text)) for name, text in knowledge_base.retrieve(request)]
+    hits = [(name, text) for name, text in hits if text]
     if not hits:
         return {**outcome, "decision": "allow", "reply": NO_ANSWER}
     return {
