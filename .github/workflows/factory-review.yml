@@ -28,12 +28,14 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          DIFF="$(git diff "$BASE...$HEAD")"
+          DIFF="$(git diff "$BASE...$HEAD" -- . ':(exclude)Docs/*.md')"
           PROMPT="$(sed -e "s|{{DIFF_BASE}}|$BASE|g" -e "s|{{BRANCH}}|$HEAD|g" -e "s|{{TASK_ID}}|$PR|g" -e "s|{{ROUND}}|ci|g" .sandcastle/review-prompt.md)"
           # The CI copy must not run shell blocks from the prompt; strip them and inline the diff.
           PROMPT="$(printf '%s' "$PROMPT" | sed '/^!`/d')"
           printf '%s\n\n<diff>\n%s\n</diff>\n' "$PROMPT" "$DIFF" > /tmp/prompt.md
-          claude -p --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(npm test:*),Bash(npm run:*),Bash(git diff:*),Bash(git log:*)" --max-turns 30 --output-format text < /tmp/prompt.md > /tmp/out.txt || true
+          claude -p --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(npm test:*),Bash(npm run:*),Bash(git diff:*),Bash(git log:*)" --max-turns 30 --output-format text < /tmp/prompt.md > /tmp/out.txt 2> /tmp/err.txt || echo "claude exit code: $?"
+          echo "--- claude stderr (first 20 lines) ---"; head -20 /tmp/err.txt
+          echo "--- claude stdout (first 20 lines) ---"; head -20 /tmp/out.txt
           python3 - <<'PY'
           import json,re,sys
           out=open('/tmp/out.txt').read()
