@@ -6,6 +6,7 @@ on:
     branches: [main]
 permissions:
   contents: read
+  pull-requests: read
   security-events: write
 jobs:
   checks:
@@ -26,7 +27,7 @@ jobs:
     container: semgrep/semgrep
     steps:
       - uses: actions/checkout@v4
-      - run: semgrep ci --config auto --config .semgrep.yml --error
+      - run: semgrep scan --config auto --config .semgrep.yml --error
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
