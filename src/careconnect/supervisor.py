@@ -10,14 +10,14 @@ NO_ANSWER = "I could not find an approved answer to that."
 def supervisor_flow(request, knowledge_base, ticket_store):
     gate = classify(request)
     outcome = {"request_id": str(uuid.uuid4()), "citations": [], "escalation": None}
-    if gate["injection"]:
-        return {**outcome, "decision": "block", "reply": "I can't help with that request."}
     if gate["clinical"] or gate["urgent"]:
         ticket = ticket_store.create(
             {"request_id": outcome["request_id"], "text": mask_pii(request)}
         )
         reply = "A licensed clinician will follow up with you."
         return {**outcome, "decision": "escalate", "reply": reply, "escalation": ticket}
+    if gate["injection"]:
+        return {**outcome, "decision": "block", "reply": "I can't help with that request."}
     hits = knowledge_base.retrieve(request)
     if not hits:
         return {**outcome, "decision": "allow", "reply": NO_ANSWER}

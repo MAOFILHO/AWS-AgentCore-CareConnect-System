@@ -116,4 +116,3 @@ def classify(text):
         "injection": matches(text, MANIPULATION_PATTERNS),
         "pii": find_pii(text),
     }
-
