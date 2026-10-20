@@ -3,3 +3,7 @@ node_modules/
 .sandcastle/.env
 .sandcastle/logs/
 .sandcastle/worktrees/
+Docs/CareConnect-Patient-Assistant-Build-Guide.md
+Docs/*.pdf
+Docs/Repo/images/
+Docs/Repo/careconnect-approved-docs/boto3-layer.zip

@@ -4,7 +4,7 @@ Instructions for every agent that works in this repo. Keep it short and true;
 every factory agent reads it before touching code.
 
 ## What this is
-<!-- one paragraph: what the product does, who uses it -->
+CareConnect is a patient-support assistant for the fictional Riverside Health hospital network. Patients ask routine questions and get cited answers from approved documents. Clinical questions go to a licensed clinician. See `GLOSSARY.md` for the terms.
 
 ## Key paths
 - `src/` application code

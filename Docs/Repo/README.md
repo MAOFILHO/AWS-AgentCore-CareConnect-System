@@ -81,7 +81,6 @@ commands/
   setup-notes.md                  ← pip installs + deploy troubleshooting
 
 careconnect-approved-docs/        ← the approved Riverside Health documents (the source of truth)
-careconnect-frontend-prod/        ← the built static frontend hosted on S3 + CloudFront
 ```
 
 ---
@@ -111,7 +110,7 @@ careconnect-frontend-prod/        ← the built static frontend hosted on S3 + C
 | 14 | Supervisor Agent | `agents/supervisor_agent.py` |
 | 15 | Deploy to AgentCore Runtime | AgentCore CLI on EC2 |
 | 16 | API Gateway endpoint | `lambda-functions/careconnect-agentcore-proxy/` |
-| 17 | Frontend (S3 + CloudFront) | `frontend/config.js`, `careconnect-frontend-prod/` |
+| 17 | Frontend (S3 + CloudFront) | `frontend/config.js` |
 | 18 | Evaluate, monitor & gate | CloudWatch + AgentCore Evaluations |
 
 ---
