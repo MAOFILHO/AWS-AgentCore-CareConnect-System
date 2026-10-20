@@ -7,8 +7,7 @@ WHAT THIS LAMBDA DOES
   It sits between the public API Gateway and the deployed Supervisor runtime.
   It receives a web request { "prompt": "..." }, calls the AgentCore runtime,
   cleans the streamed response into a single answer, and returns it with the
-  CORS headers a browser needs. This build also returns the REAL error text so
-  failures are easy to debug.
+  CORS headers a browser needs. Failures return a short fixed error message only.
 
 HOW TO DEPLOY (console)
   1. AWS Lambda → Create function → name it:  careconnect-agentcore-proxy
@@ -33,27 +32,38 @@ AGENT_RUNTIME_ARN = "REPLACE_ME_WITH_YOUR_AGENT_RUNTIME_ARN"
 # >>> CHANGE #2: region (leave as-is if your agent is in us-east-1).
 AWS_REGION = "us-east-1"
 
-# >>> CHANGE #3 (optional, for production): replace "*" with your CloudFront
-#     domain so only your website can call this API.
-ALLOWED_ORIGIN = "*"
+# >>> CHANGE #3: your CloudFront domain, e.g. "https://dxxxx.cloudfront.net".
+#     Only this origin gets a CORS allowance. Never use "*".
+ALLOWED_ORIGIN = "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN"
 
 import json
 import re
-import traceback
-import boto3
 
-# CORS headers applied to EVERY response, including errors and preflight.
-CORS_HEADERS = {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "OPTIONS,POST",
-}
+
+# Build the CORS headers. The allow-origin header is added only when the
+# caller's Origin is the one configured website.
+def _headers(event):
+    headers = {"Content-Type": "application/json"}
+    origin = (event.get("headers") or {}).get("origin") or (
+        event.get("headers") or {}
+    ).get("Origin")
+    if origin and origin == ALLOWED_ORIGIN:
+        headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+        headers["Access-Control-Allow-Headers"] = "Content-Type"
+        headers["Access-Control-Allow-Methods"] = "OPTIONS,POST"
+        headers["Vary"] = "Origin"
+    return headers
 
 
 # Small helper to build a JSON response with the CORS headers attached.
-def _reply(status, obj):
-    return {"statusCode": status, "headers": CORS_HEADERS, "body": json.dumps(obj)}
+def _reply(event, status, obj):
+    return {"statusCode": status, "headers": _headers(event), "body": json.dumps(obj)}
+
+
+def _client():
+    import boto3
+
+    return boto3.client("bedrock-agentcore", region_name=AWS_REGION)
 
 
 # Remove any <thinking>...</thinking> blocks from the model's text.
@@ -92,42 +102,22 @@ def _extract_text_from_sse(raw):
 def lambda_handler(event, context):
     # Handle the browser's CORS preflight (OPTIONS) request first.
     if event.get("httpMethod") == "OPTIONS":
-        return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
+        return {"statusCode": 200, "headers": _headers(event), "body": ""}
 
     # Read the prompt out of the request body.
     try:
         body = event.get("body") or "{}"
         body = json.loads(body) if isinstance(body, str) else body
         prompt = (body.get("prompt") or "").strip()
-    except Exception as e:
-        return _reply(400, {"error": "bad body", "detail": str(e)})
+    except Exception:
+        return _reply(event, 400, {"error": "Bad request body."})
 
     if not prompt:
-        return _reply(400, {"error": "Missing 'prompt'."})
+        return _reply(event, 400, {"error": "Missing 'prompt'."})
 
-    # DIAGNOSTIC 1: confirm the ARN is set and the client can be created.
-    diag = {"arn_set": "REPLACE_ME" not in AGENT_RUNTIME_ARN}
+    # Any failure returns a short fixed message: no trace, no diagnostics.
     try:
-        client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
-        diag["client"] = "bedrock-agentcore OK"
-        diag["invoke_methods"] = [m for m in dir(client) if "invoke" in m.lower()]
-    except Exception as e:
-        diag["client_error"] = f"{type(e).__name__}: {e}"
-        try:
-            import botocore.session
-
-            diag["available_services_with_bedrock"] = [
-                s
-                for s in botocore.session.get_session().get_available_services()
-                if "bedrock" in s or "agent" in s
-            ]
-        except Exception as e2:
-            diag["service_list_error"] = str(e2)
-        return _reply(500, {"stage": "client_creation", "diag": diag})
-
-    # DIAGNOSTIC 2: try the invoke and report the exact error if it fails.
-    try:
-        response = client.invoke_agent_runtime(
+        response = _client().invoke_agent_runtime(
             agentRuntimeArn=AGENT_RUNTIME_ARN,
             payload=json.dumps({"prompt": prompt}).encode("utf-8"),
         )
@@ -137,18 +127,9 @@ def lambda_handler(event, context):
             if isinstance(raw_bytes, (bytes, bytearray))
             else str(raw_bytes)
         )
-    except Exception as e:
-        return _reply(
-            500,
-            {
-                "stage": "invoke",
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "diag": diag,
-                "trace": traceback.format_exc()[-1500:],
-            },
-        )
+    except Exception:
+        return _reply(event, 500, {"error": "Request failed."})
 
     # Turn the streamed response into a clean single answer and return it.
     answer = _clean(_extract_text_from_sse(raw)) or _clean(raw)
-    return _reply(200, {"answer": answer})
+    return _reply(event, 200, {"answer": answer})
