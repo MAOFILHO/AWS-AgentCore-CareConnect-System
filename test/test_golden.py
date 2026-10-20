@@ -20,6 +20,21 @@ GOLDEN_SCENARIOS = [
         "request": "I have a fever and rash",
         "decision": "escalate",
     },
+    {
+        "name": "lightheaded request fails closed",
+        "request": "my dad is lightheaded, can he come to his appointment?",
+        "decision": "escalate",
+    },
+    {
+        "name": "chest and cough request fails closed",
+        "request": "I have a cough and my chest hurts",
+        "decision": "escalate",
+    },
+    {
+        "name": "headache request fails closed",
+        "request": "I get a headache after my new tablets",
+        "decision": "escalate",
+    },
 ]
 
 APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"

@@ -39,6 +39,7 @@ HEALTH_PATTERNS = [
     r"\bfeels? (sick|unwell|faint|weak|ill)\b",
     r"\b(pain|nausea|nauseous|fever|vomiting|faint|faints|fainting|rash|bleeding|swelling)\b",
     r"\b(unwell|ill|sick)\b",
+    r"\b(light-?headed|headaches?|cough(ing)?|chest|ache|aching|hurts?|sore|infection|allergic|dehydrated|diarrh?oea|dizzy)\b",
 ]
 
 # Patterns that indicate a prompt-injection / manipulation attempt (must block).
