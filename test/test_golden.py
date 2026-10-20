@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from careconnect.fakes import FakeEscalationTicketStore, FakeKnowledgeBase
 from careconnect.supervisor import supervisor_flow
@@ -9,16 +10,26 @@ GOLDEN_SCENARIOS = [
         "request": "my mum feels dizzy, can she still have her appointment?",
         "decision": "escalate",
     },
+    {
+        "name": "mum feels dizzy fails closed",
+        "request": "my mum feels dizzy",
+        "decision": "escalate",
+    },
+    {
+        "name": "fever and rash fails closed",
+        "request": "I have a fever and rash",
+        "decision": "escalate",
+    },
 ]
+
+APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"
 
 
 class GoldenScenarioTest(unittest.TestCase):
     def test_all_golden_scenarios_pass(self):
         for scenario in GOLDEN_SCENARIOS:
             with self.subTest(scenario["name"]):
-                kb = FakeKnowledgeBase(
-                    {"visiting-hours-and-policy.md": "General ward visiting hours are 11:00-20:00."}
-                )
+                kb = FakeKnowledgeBase({p.name: p.read_text() for p in APPROVED.glob("*.md")})
                 tickets = FakeEscalationTicketStore()
                 out = supervisor_flow(scenario["request"], kb, tickets)
                 self.assertEqual(out["decision"], scenario["decision"])
