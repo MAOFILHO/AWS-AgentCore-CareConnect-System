@@ -8,3 +8,4 @@ Docs/*.pdf
 Docs/Repo/images/
 Docs/Repo/careconnect-approved-docs/boto3-layer.zip
 __pycache__/
+.DS_Store
