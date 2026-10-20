@@ -163,7 +163,8 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
           .then((r) => parseVerdict(r.stdout, name));
       [code, sec] = await Promise.all([
         review("review", MODELS.reviewer, "./.sandcastle/review-prompt.md"),
-        review("security", MODELS.security, "./.sandcastle/security-prompt.md"),
+        // Stagger the start: two containers writing ~/.gitconfig at once fail with "could not lock config file".
+        new Promise((r) => setTimeout(r, 5000)).then(() => review("security", MODELS.security, "./.sandcastle/security-prompt.md")),
       ]);
       const blocking = [...code.findings, ...sec.findings].filter((f) => f.severity !== "minor");
       if (code.verdict === "PASS" && sec.verdict === "PASS") break;
