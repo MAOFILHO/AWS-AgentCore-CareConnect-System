@@ -1,0 +1,3 @@
+[submodule "Docs/Labs-Notebooks"]
+	path = Docs/Labs-Notebooks
+	url = https://github.com/k21academyuk/careconnect-patient-assistant-k21.git
