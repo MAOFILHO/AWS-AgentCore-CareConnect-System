@@ -1,0 +1,13 @@
+# Paths that always need a human reviewer, whatever the AI reviewers say.
+# Replace @OWNER with a team or person. Branch protection requires code-owner review.
+/.github/            @OWNER
+/.sandcastle/        @OWNER
+/REVIEW.md           @OWNER
+/AGENTS.md           @OWNER
+/Dockerfile          @OWNER
+/**/auth/**          @OWNER
+/**/billing/**       @OWNER
+/**/payments/**      @OWNER
+/**/migrations/**    @OWNER
+package.json         @OWNER
+package-lock.json    @OWNER

@@ -1,0 +1,22 @@
+# AI security review, blocking. Runs with ONLY its own API key; no other secrets.
+# Uses `pull_request` (never pull_request_target) so forks get no secrets.
+name: factory-security
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  security-review:
+    name: ai-security-review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - uses: anthropics/claude-code-security-review@main
+        with:
+          comment-pr: true
+          upload-results: true
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          custom-security-scan-instructions: .sandcastle/security-prompt.md

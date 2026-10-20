@@ -1,0 +1,18 @@
+rules:
+  - id: factory-no-skipped-tests
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "A test was skipped. The factory forbids skipping tests to pass; fix the test or the code."
+    patterns:
+      - pattern-either:
+          - pattern: test.skip(...)
+          - pattern: it.skip(...)
+          - pattern: describe.skip(...)
+          - pattern: xit(...)
+  - id: factory-no-env-dump
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Dumping the whole environment can leak secrets into logs."
+    pattern-either:
+      - pattern: console.log(process.env)
+      - pattern: JSON.stringify(process.env)

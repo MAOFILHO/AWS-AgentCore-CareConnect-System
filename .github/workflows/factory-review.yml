@@ -1,0 +1,56 @@
+# Code review as a required check. The agent is read-only; this job turns its
+# review.json into comments, so an injected agent cannot post or delete anything.
+name: factory-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  review:
+    name: ai-code-review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: curl -fsSL https://claude.ai/install.sh | bash && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Review (read-only agent, structured output)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          DIFF="$(git diff "$BASE...$HEAD")"
+          PROMPT="$(sed -e "s|{{DIFF_BASE}}|$BASE|g" -e "s|{{BRANCH}}|$HEAD|g" -e "s|{{TASK_ID}}|$PR|g" -e "s|{{ROUND}}|ci|g" .sandcastle/review-prompt.md)"
+          # The CI copy must not run shell blocks from the prompt; strip them and inline the diff.
+          PROMPT="$(printf '%s' "$PROMPT" | sed '/^!`/d')"
+          printf '%s\n\n<diff>\n%s\n</diff>\n' "$PROMPT" "$DIFF" > /tmp/prompt.md
+          claude -p "$(cat /tmp/prompt.md)" --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(npm test:*),Bash(npm run:*),Bash(git diff:*),Bash(git log:*)" --max-turns 30 --output-format text > /tmp/out.txt || true
+          python3 - <<'PY'
+          import json,re,sys
+          out=open('/tmp/out.txt').read()
+          m=re.search(r'<review>(.*?)</review>',out,re.S)
+          data=json.loads(m.group(1)) if m else {"verdict":"CHANGES","findings":[{"severity":"major","file":"-","problem":"reviewer produced no structured verdict","fix":"re-run"}],"summary":"no verdict"}
+          json.dump(data,open('review.json','w'))
+          PY
+      - name: Post comments (the Action, not the agent, writes to GitHub)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          V="$(jq -r .verdict review.json)"; S="$(jq -r .summary review.json)"
+          BODY="### Factory code review: **$V**
+          $S
+          $(jq -r '.findings[] | "- **\(.severity)** `\(.file)\(if .line then ":\(.line)" else "" end)` — \(.problem) → \(.fix)"' review.json)
+          <!-- factory-review -->"
+          gh pr comment "$PR" --body "$BODY"
+          [ "$V" = "PASS" ] || { echo "Code review requested changes"; exit 1; }
