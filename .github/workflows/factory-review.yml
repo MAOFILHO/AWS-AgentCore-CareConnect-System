@@ -15,11 +15,11 @@ jobs:
     name: ai-code-review
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with: { node-version: 22 }
-      - run: curl -fsSL https://claude.ai/install.sh | bash && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: npm install -g @anthropic-ai/claude-code@2.1.304
       - name: Review (read-only agent, structured output)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -33,7 +33,7 @@ jobs:
           # The CI copy must not run shell blocks from the prompt; strip them and inline the diff.
           PROMPT="$(printf '%s' "$PROMPT" | sed '/^!`/d')"
           printf '%s\n\n<diff>\n%s\n</diff>\n' "$PROMPT" "$DIFF" > /tmp/prompt.md
-          claude -p "$(cat /tmp/prompt.md)" --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(npm test:*),Bash(npm run:*),Bash(git diff:*),Bash(git log:*)" --max-turns 30 --output-format text > /tmp/out.txt || true
+          claude -p --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(npm test:*),Bash(npm run:*),Bash(git diff:*),Bash(git log:*)" --max-turns 30 --output-format text < /tmp/prompt.md > /tmp/out.txt || true
           python3 - <<'PY'
           import json,re,sys
           out=open('/tmp/out.txt').read()
