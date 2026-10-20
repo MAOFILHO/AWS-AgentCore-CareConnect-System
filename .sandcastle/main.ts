@@ -59,14 +59,21 @@ const verdictSchema = z.object({
 type Verdict = z.infer<typeof verdictSchema>;
 type Issue = z.infer<typeof planSchema>["issues"][number];
 
-/** sandbox.run() has no structured-output option in Sandcastle 0.12.x; parse the <review> tag ourselves. */
-function parseVerdict(stdout: string, who: string): Verdict {
+/** sandbox.run() has no structured-output option in Sandcastle 0.12.x; parse the <review> tag ourselves.
+ *  Returns an error string when the reply is missing, is not valid JSON or fails the schema, so the caller can retry. */
+function parseVerdict(stdout: string): { ok: true; data: Verdict } | { ok: false; error: string } {
   const m = /<review>([\s\S]*?)<\/review>/.exec(stdout);
-  if (!m) return { verdict: "CHANGES", findings: [{ severity: "major", file: "-", problem: `${who} produced no <review> verdict`, fix: "re-run the review" }], summary: "no verdict" };
+  if (!m) return { ok: false, error: "no <review> verdict" };
   const raw = m[1]!.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-  const parsed = verdictSchema.safeParse(JSON.parse(raw));
-  if (!parsed.success) return { verdict: "CHANGES", findings: [{ severity: "major", file: "-", problem: `${who} verdict failed schema: ${parsed.error.message.slice(0, 200)}`, fix: "re-run the review" }], summary: "invalid verdict" };
-  return parsed.data;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, error: `verdict is not valid JSON: ${(e as Error).message}` };
+  }
+  const parsed = verdictSchema.safeParse(json);
+  if (!parsed.success) return { ok: false, error: `verdict failed schema: ${parsed.error.message.slice(0, 200)}` };
+  return { ok: true, data: parsed.data };
 }
 
 // ---------------------------------------------------------------------------
@@ -151,16 +158,24 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     while (round < MAX_REVIEW_ROUNDS) {
       round += 1;
       log(tag, `review round ${round}/${MAX_REVIEW_ROUNDS} (code ∥ security)`);
-      const review = (name: string, model: string, file: string) =>
-        sandbox
-          .run({
-            name: `${name}-${issue.id}-r${round}`,
+      // A reviewer reply that is not valid JSON gets one retry before it counts as a failed review.
+      const review = async (name: string, model: string, file: string): Promise<Verdict> => {
+        let error = "";
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          const r = await sandbox.run({
+            name: `${name}-${issue.id}-r${round}${attempt > 1 ? "-retry" : ""}`,
             maxIterations: 1,
             agent: sandcastle.claudeCode(model),
             promptFile: file,
             promptArgs: { TASK_ID: issue.id, BRANCH: issue.branch, DIFF_BASE: baseForDiff, ROUND: String(round) },
-          })
-          .then((r) => parseVerdict(r.stdout, name));
+          });
+          const v = parseVerdict(r.stdout);
+          if (v.ok) return v.data;
+          error = v.error;
+          log(tag, `${name} reply unusable (${error}); ${attempt < 2 ? "retrying once" : "giving up"}`);
+        }
+        return { verdict: "CHANGES", findings: [{ severity: "major", file: "-", problem: `${name}: ${error}`, fix: "re-run the review" }], summary: "invalid verdict" };
+      };
       [code, sec] = await Promise.all([
         review("review", MODELS.reviewer, "./.sandcastle/review-prompt.md"),
         // Stagger the start: two containers writing ~/.gitconfig at once fail with "could not lock config file".
