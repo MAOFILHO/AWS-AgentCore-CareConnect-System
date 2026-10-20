@@ -1,4 +1,4 @@
-# Deterministic gates. Required by branch protection. Cannot be prompt-injected.
+# Deterministic gates. Run on every PR; a human checks them before merging. Cannot be prompt-injected.
 name: factory-ci
 on:
   pull_request:
