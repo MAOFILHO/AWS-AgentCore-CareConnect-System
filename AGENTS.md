@@ -24,6 +24,7 @@ PORT=${PORT:-3000} npm run dev
 Run all of these before every commit. They must pass. Never skip or weaken a test to make them pass.
 ```bash
 npm test
+PYTHONPATH=src python3 -m unittest discover -s test
 npm run typecheck --if-present
 npm run lint --if-present
 npm run build --if-present
