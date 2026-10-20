@@ -32,6 +32,7 @@ npm run build --if-present
 
 ## Conventions
 - Agents and Lambdas are Python (Strands and AgentCore SDKs). Node stays for the frontend and factory tooling, as ES modules only.
+- Every structured output of an agent or a Lambda (a Safety gate decision, a Verification result, an API reply body) is a Pydantic model. Parse model replies with `model_validate_json` and treat a parse failure as FAIL, never as PASS. Add `pydantic` to the Python requirements in the first ticket that needs it.
 - Smallest change that meets the issue. No speculative options.
 - Use the words in `GLOSSARY.md`. "Agent" means one of the six LLM agents; the Safety gate is code.
 - One commit per piece of work, one-line message.
