@@ -31,6 +31,16 @@ URGENT_PATTERNS = [
     r"\bpassed out\b",
 ]
 
+# Health or symptom wording. Not clinical by itself, but if no approved document
+# answers it the request is escalated (fail closed).
+HEALTH_PATTERNS = [
+    r"\bdizz(y|iness)\b",
+    r"\bsymptoms?\b",
+    r"\bfeels? (sick|unwell|faint|weak|ill)\b",
+    r"\b(pain|nausea|nauseous|fever|vomiting|faint|faints|fainting|rash|bleeding|swelling)\b",
+    r"\b(unwell|ill|sick)\b",
+]
+
 # Patterns that indicate a prompt-injection / manipulation attempt (must block).
 MANIPULATION_PATTERNS = [
     r"\bignore previous instructions\b",
@@ -116,3 +126,8 @@ def classify(text):
         "injection": matches(text, MANIPULATION_PATTERNS),
         "pii": find_pii(text),
     }
+
+
+# Does the text read as a health or symptom request?
+def is_health_request(text):
+    return matches(text, HEALTH_PATTERNS)
