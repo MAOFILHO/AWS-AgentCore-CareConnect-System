@@ -28,7 +28,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          DIFF="$(git diff "$BASE...$HEAD")"
+          DIFF="$(git diff "$BASE...$HEAD" -- . ':(exclude)Docs/*.md')"
           PROMPT="$(sed -e "s|{{DIFF_BASE}}|$BASE|g" -e "s|{{BRANCH}}|$HEAD|g" -e "s|{{TASK_ID}}|$PR|g" -e "s|{{ROUND}}|ci|g" .sandcastle/review-prompt.md)"
           # The CI copy must not run shell blocks from the prompt; strip them and inline the diff.
           PROMPT="$(printf '%s' "$PROMPT" | sed '/^!`/d')"
