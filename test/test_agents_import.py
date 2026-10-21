@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from careconnect.budget import load_budgets  # noqa: F401
 from careconnect.supervisor_model import load_supervisor_model
 
 AGENTS = [
@@ -55,6 +54,9 @@ class AgentImportTest(unittest.TestCase):
         for name in AGENTS:
             with self.subTest(agent=name):
                 self.import_clean(name)
+
+    def test_supervisor_model_is_a_bedrock_model_id(self):
+        self.assertRegex(load_supervisor_model(), r"^(us\.|global\.)?anthropic\.claude-")
 
     def test_old_agent_folder_holds_only_a_pointer(self):
         files = sorted(p.name for p in (ROOT / "Docs/Repo/agents").iterdir())

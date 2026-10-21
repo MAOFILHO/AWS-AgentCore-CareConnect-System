@@ -16,15 +16,15 @@ WHAT THIS AGENT DOES
 
 >>> IMPORTANT FOR LEARNERS <<<
   All FOUR agent files (retrieval_agent.py, task_tool_agent.py,
-  escalation_agent.py, verification_agent.py) MUST be in the SAME folder as this
-  file, because this script imports from them.
+  escalation_agent.py, verification_agent.py) live in the same package as this
+  file (careconnect.agents), and this script imports from them.
 
 HOW TO USE
   1. Export all the environment variables first (KB ID, Gateway URL, Guardrail
      ID/version, State Machine ARN) — see the "environment variables" block in
      the guide. Each is marked ">>> LEARNERS" below where it's used.
   2. Run it:
-         python supervisor_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.supervisor_agent
   3. Type a patient request; type 'exit' to stop.
 """
 
