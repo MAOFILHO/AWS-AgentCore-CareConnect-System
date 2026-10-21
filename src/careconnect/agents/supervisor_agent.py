@@ -39,14 +39,10 @@ from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_NOTICE
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
-ESCALATION_FAILED_NOTICE = (
-    "We could not pass your request to a clinician. Please contact Riverside Health "
-    "directly, or call emergency services if your symptoms are urgent."
-)
 log = logging.getLogger(__name__)
 
 

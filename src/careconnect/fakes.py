@@ -26,6 +26,17 @@ class FakeEscalationTicketStore:
         return ticket
 
 
+class FakeApprovalWorkflow:
+    def __init__(self, error=False):
+        self.error = error
+        self.started = []
+
+    def start(self, ticket):
+        if self.error:
+            raise RuntimeError("workflow unavailable")
+        self.started.append(ticket)
+
+
 class FakeGrounding:
     """Grounding check: the draft must be supported by the cited passages."""
 

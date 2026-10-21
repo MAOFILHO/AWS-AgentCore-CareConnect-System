@@ -1,6 +1,7 @@
 import unittest
 
 from careconnect.fakes import (
+    FakeApprovalWorkflow,
     FakeCostMeter,
     FakeEscalationTicketStore,
     FakeGrounding,
@@ -21,7 +22,7 @@ class VerificationGateTest(unittest.TestCase):
             FakeEscalationTicketStore(),
             grounding=grounding or FakeGrounding(),
             guardrail=guardrail or FakeGuardrail(),
-            approved=set(documents),
+            workflow=FakeApprovalWorkflow(), approved=set(documents),
             cost_meter=FakeCostMeter(),
         )
 

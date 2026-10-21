@@ -8,17 +8,23 @@ from careconnect.verification import verify
 
 NO_ANSWER = "I could not find an approved answer to that."
 ESCALATION_NOTICE = "A licensed clinician will follow up with you."
+ESCALATION_FAILED_NOTICE = (
+    "We could not pass your request to a clinician. Please contact Riverside Health "
+    "directly, or call emergency services if your symptoms are urgent."
+)
+CLINICAL_REASON = "Medication/clinical decision requires clinician review."
+UNVERIFIED_REASON = "Answer could not be verified."
 
 
 def supervisor_flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
-    *, approved, cost_meter, budgets=None, clock=None,
+    *, workflow, approved, cost_meter, budgets=None, clock=None,
 ):
     tracker = BudgetTracker(budgets or load_budgets(), cost_meter, clock)
     request_id = str(uuid.uuid4())
     try:
         return _flow(
-            request, knowledge_base, ticket_store, grounding, guardrail, document_processor,
+            request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
             approved, tracker, request_id,
         )
     except BudgetExceeded:
@@ -29,25 +35,26 @@ def supervisor_flow(
 
 
 def _flow(
-    request, knowledge_base, ticket_store, grounding, guardrail, document_processor,
+    request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
     approved, tracker, request_id,
 ):
     gate = classify(request)
     outcome = {"request_id": request_id, "citations": [], "escalation": None}
 
-    def escalate():
-        ticket = ticket_store.create(
-            {"request_id": outcome["request_id"], "text": mask_pii(request)}
-        )
-        return {
-            **outcome,
-            "decision": "escalate",
-            "reply": ESCALATION_NOTICE,
-            "escalation": ticket,
-        }
+    def escalate(reason, category):
+        ticket = ticket_store.create({
+            "request_id": outcome["request_id"], "text": mask_pii(request),
+            "reason": reason, "category": category,
+        })
+        reply = ESCALATION_NOTICE
+        try:
+            workflow.start(ticket)
+        except Exception:  # the ticket stays; promise nothing
+            reply = ESCALATION_FAILED_NOTICE
+        return {**outcome, "decision": "escalate", "reply": reply, "escalation": ticket}
 
     if gate["clinical"] or gate["urgent"] or is_health_request(request):
-        return escalate()
+        return escalate(CLINICAL_REASON, "clinical_question")
     if gate["injection"]:
         return {**outcome, "decision": "block", "reply": "I can't help with that request."}
     tracker.step("retrieve")
@@ -65,5 +72,5 @@ def _flow(
         draft, citations, dict(hits), grounding, guardrail
     )
     if result.status != "PASS":
-        return escalate()
+        return escalate(UNVERIFIED_REASON, "unverified_answer")
     return {**outcome, "decision": "allow", "reply": draft, "citations": citations}
