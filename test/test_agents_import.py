@@ -75,6 +75,13 @@ class AgentImportTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mod.search_docs("parking")
 
+    def test_verification_agent_gets_the_configured_model(self):
+        verification = self.import_clean("careconnect.agents.verification_agent")
+        agent_class = mock.MagicMock()
+        with mock.patch.dict(sys.modules, {"strands": mock.MagicMock(Agent=agent_class)}):
+            verification.get_verification_agent()
+        self.assertEqual(agent_class.call_args.kwargs["model"], load_supervisor_model())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -89,7 +89,7 @@ careconnect-approved-docs/        ← the approved Riverside Health documents (t
 
 1. Follow the **lab guide** as your main instructions.
 2. When the guide says *"create `<file>.py` and paste this code"*, open the matching file in
-   `agents/` or `lambda-functions/`, read its header + comments, and copy it into place.
+   `src/careconnect/agents/` or `lambda-functions/`, read its header + comments, and copy it into place.
 3. **Fill in your own AWS values** wherever a comment says so. Editable spots are tagged
    **`UPDATE THIS`**, **`>>> CHANGE #`**, or **`>>> LEARNERS`**. Every example ID/ARN/URL is
    a placeholder — replace it with your own from the AWS Console.

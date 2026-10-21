@@ -249,6 +249,7 @@ def supervisor_flow(request):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     get_guardrail_settings()  # fail closed: refuse to start without a Guardrail
+    load_supervisor_model()  # and without a valid model config
     print("\nCareConnect Supervisor Agent")
     print("Type 'exit' to stop.\n")
 
