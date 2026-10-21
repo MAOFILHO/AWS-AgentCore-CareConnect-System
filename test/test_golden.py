@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from careconnect.fakes import (
+    FakeCostMeter,
     FakeEscalationTicketStore,
     FakeGrounding,
     FakeGuardrail,
@@ -40,6 +41,12 @@ GOLDEN_SCENARIOS = [
         "request": "I get a headache after my new tablets",
         "decision": "escalate",
     },
+    {
+        "name": "cost protection stops a request over the cost limit",
+        "request": "visiting hours",
+        "decision": "stop",
+        "cost_per_step": 0.03,
+    },
 ]
 
 APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"
@@ -54,6 +61,7 @@ class GoldenScenarioTest(unittest.TestCase):
                 out = supervisor_flow(
                     scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
                     approved=set(kb.documents),
+                    cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
                 )
                 self.assertEqual(out["decision"], scenario["decision"])
                 self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
