@@ -1,4 +1,4 @@
-"""Supervisor model name, read from model.json (default: the cheapest model)."""
+"""Supervisor model name, read from model.json (no default: a missing file raises FileNotFoundError)."""
 
 from pathlib import Path
 

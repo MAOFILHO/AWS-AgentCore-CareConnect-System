@@ -13,7 +13,7 @@ HOW TO USE
   1. Save the Retrieval Agent's output into a file named:
          retrieved_passages.txt
   2. Run it:
-         python document_processing_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.document_processing_agent
   The script reads retrieved_passages.txt and prints the structured output.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS

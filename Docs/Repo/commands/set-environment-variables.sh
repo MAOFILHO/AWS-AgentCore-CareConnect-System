@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # CareConnect environment variables
-# Run this whole block on your EC2 dev box BEFORE starting supervisor_agent.py.
+# Run this whole block on your EC2 dev box BEFORE starting careconnect.agents.supervisor_agent.
 #
 # >>> LEARNERS: replace each quoted value with YOUR OWN value from the AWS
 #     console. The placeholder values below are examples — they will NOT work

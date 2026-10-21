@@ -16,7 +16,7 @@ HOW TO USE
   2. (Optional) set the region if not us-east-1:
          export AWS_REGION="us-east-1"
   3. Run it:
-         python task_tool_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.task_tool_agent
   4. Try: "Check the appointment status for PATIENT-DEMO-001."; type 'exit' to stop.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS

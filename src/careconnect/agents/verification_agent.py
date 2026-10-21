@@ -19,7 +19,7 @@ HOW TO USE
   2. Put the drafted answer in draft_answer.txt and the evidence in
      retrieved_passages.txt.
   3. Run it:
-         python verification_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.verification_agent
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
   - CARECONNECT_GUARDRAIL_ID / _VERSION: must be YOUR guardrail values.

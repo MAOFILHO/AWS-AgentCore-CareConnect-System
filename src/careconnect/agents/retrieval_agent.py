@@ -12,7 +12,7 @@ HOW TO USE
   1. Set your Knowledge Base ID as an environment variable before running:
          export CARECONNECT_KB_ID="YOUR_KNOWLEDGE_BASE_ID"     # <-- UPDATE THIS
   2. Run it:
-         python retrieval_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.retrieval_agent
   3. Type a patient question; type 'exit' to stop.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS

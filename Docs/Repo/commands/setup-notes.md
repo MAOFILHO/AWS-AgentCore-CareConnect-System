@@ -39,7 +39,7 @@ python -c "import boto3; print('Boto3 installation successful')"
 
 ## 3. Set your environment variables
 
-Before running `supervisor_agent.py`, export the five values the agents need.
+Before running `PYTHONPATH=src python3 -m careconnect.agents.supervisor_agent`, export the five values the agents need.
 Edit and run `../commands/set-environment-variables.sh` (fill in YOUR values first).
 
 ## 4. Deploy troubleshooting (AgentCore Runtime)

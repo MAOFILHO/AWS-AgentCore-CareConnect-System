@@ -139,12 +139,13 @@ def run_task_tool(request, state):
     # >>> LEARNERS: export CARECONNECT_GATEWAY_URL="<your-gateway-mcp-url>"
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
         return "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]"
+    model = load_supervisor_model()  # a config error must not read as a gateway error
     try:
         from careconnect.agents.task_tool_agent import SYSTEM_PROMPT, get_mcp_client
         from strands import Agent
         with get_mcp_client() as mcp_client:
             tools = mcp_client.list_tools_sync()
-            agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=load_supervisor_model())
+            agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=model)
             return str(agent(request))
     except Exception as exc:
         return f"[task/tool agent error - gateway call failed: {exc}]"

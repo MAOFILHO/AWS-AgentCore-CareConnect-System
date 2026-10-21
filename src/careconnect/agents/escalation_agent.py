@@ -12,7 +12,7 @@ HOW TO USE
   1. Set the Step Functions state machine ARN you created earlier:
          export CARECONNECT_STATE_MACHINE_ARN="<YOUR_STATE_MACHINE_ARN>"   # <-- UPDATE THIS
   2. Run it:
-         python escalation_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.escalation_agent
   It creates a sample escalation ticket and starts the workflow.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
