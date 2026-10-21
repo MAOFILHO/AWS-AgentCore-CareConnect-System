@@ -51,3 +51,12 @@ class FakeGuardrail:
         if self.error:
             raise RuntimeError("guardrail unavailable")
         return self.allow
+
+
+class FakeCostMeter:
+    def __init__(self, cost_per_step=0.0):
+        self.cost_per_step = cost_per_step
+        self.total = 0.0
+
+    def charge(self, name):
+        self.total += self.cost_per_step

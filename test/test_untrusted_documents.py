@@ -5,6 +5,7 @@ from unittest import mock
 
 from careconnect.document_processing import DocumentProcessingResult, FakeDocumentProcessor
 from careconnect.fakes import (
+    FakeCostMeter,
     FakeEscalationTicketStore,
     FakeGrounding,
     FakeGuardrail,
@@ -22,6 +23,7 @@ def run(kb, request):
     return supervisor_flow(
         request, kb, FakeEscalationTicketStore(), FakeGrounding(), FakeGuardrail(),
         FakeDocumentProcessor(), approved=set(load_approved(DOCS)),
+        cost_meter=FakeCostMeter(),
     )
 
 
