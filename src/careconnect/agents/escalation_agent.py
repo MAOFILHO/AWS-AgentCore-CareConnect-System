@@ -12,7 +12,7 @@ HOW TO USE
   1. Set the Step Functions state machine ARN you created earlier:
          export CARECONNECT_STATE_MACHINE_ARN="<YOUR_STATE_MACHINE_ARN>"   # <-- UPDATE THIS
   2. Run it:
-         python escalation_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.escalation_agent
   It creates a sample escalation ticket and starts the workflow.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
@@ -21,7 +21,6 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
   - region_name: change if you did not build in us-east-1.
 """
 
-import boto3
 import uuid
 import json
 import os
@@ -30,16 +29,18 @@ from datetime import datetime, timezone
 # ---------------------------------------------------------------------------
 # AWS clients. UPDATE region_name if you did not build in us-east-1.
 # ---------------------------------------------------------------------------
-dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-stepfunctions = boto3.client("stepfunctions", region_name="us-east-1")
+REGION = "us-east-1"
 
 # UPDATE THIS if your DynamoDB table has a different name.
 TABLE_NAME = "careconnect-escalations"
 
 # UPDATE THIS by exporting CARECONNECT_STATE_MACHINE_ARN before running.
-STATE_MACHINE_ARN = os.environ.get("CARECONNECT_STATE_MACHINE_ARN")
-
-table = dynamodb.Table(TABLE_NAME)
+# It is read when the workflow starts, not when this file is imported.
+def get_state_machine_arn():
+    arn = os.environ.get("CARECONNECT_STATE_MACHINE_ARN")
+    if not arn:
+        raise ValueError("CARECONNECT_STATE_MACHINE_ARN is not configured.")
+    return arn
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,9 @@ def create_escalation_ticket(reason, category, request_details):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": int(datetime.now(timezone.utc).timestamp()) + 2592000,
     }
+    import boto3
+
+    table = boto3.resource("dynamodb", region_name=REGION).Table(TABLE_NAME)
     table.put_item(Item=item)
     return ticket_id
 
@@ -65,8 +69,11 @@ def create_escalation_ticket(reason, category, request_details):
 # Start the Step Functions approval workflow for a given ticket.
 # ---------------------------------------------------------------------------
 def start_approval_workflow(ticket_id):
+    import boto3
+
+    stepfunctions = boto3.client("stepfunctions", region_name=REGION)
     response = stepfunctions.start_execution(
-        stateMachineArn=STATE_MACHINE_ARN,
+        stateMachineArn=get_state_machine_arn(),
         input=json.dumps({"ticket_id": ticket_id}),
     )
     return response["executionArn"]

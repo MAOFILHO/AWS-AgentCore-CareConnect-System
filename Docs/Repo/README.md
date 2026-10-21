@@ -58,7 +58,7 @@ actions.
 README.md                         ← you are here
 images/                           ← full architecture, animated flow, and step 5–19 diagrams
 
-agents/                           ← the six specialist agents (run on your EC2 dev box)
+src/careconnect/agents/           ← the six specialist agents (run on your EC2 dev box)
   retrieval_agent.py
   document_processing_agent.py
   task_tool_agent.py
@@ -89,7 +89,7 @@ careconnect-approved-docs/        ← the approved Riverside Health documents (t
 
 1. Follow the **lab guide** as your main instructions.
 2. When the guide says *"create `<file>.py` and paste this code"*, open the matching file in
-   `agents/` or `lambda-functions/`, read its header + comments, and copy it into place.
+   `src/careconnect/agents/` or `lambda-functions/`, read its header + comments, and copy it into place.
 3. **Fill in your own AWS values** wherever a comment says so. Editable spots are tagged
    **`UPDATE THIS`**, **`>>> CHANGE #`**, or **`>>> LEARNERS`**. Every example ID/ARN/URL is
    a placeholder — replace it with your own from the AWS Console.
@@ -102,12 +102,12 @@ careconnect-approved-docs/        ← the approved Riverside Health documents (t
 | 6 | Knowledge Base + retrieval | Bedrock Knowledge Base, S3 Vectors, Titan Embeddings |
 | 7 | Patient Safety Guardrail | Bedrock Guardrails |
 | 8 | Deterministic safety | `lambda-functions/careconnect-deterministic-safety/` |
-| 9 | Retrieval Agent | `agents/retrieval_agent.py` |
-| 10 | Document-Processing Agent | `agents/document_processing_agent.py` |
-| 11 | Task/Tool Agent + Gateway | `lambda-functions/careconnect-mock-hospital-tools/`, `agents/task_tool_agent.py` |
-| 12 | Verification Agent | `agents/verification_agent.py` |
-| 13 | Escalation Agent | `agents/escalation_agent.py` (DynamoDB + Step Functions) |
-| 14 | Supervisor Agent | `agents/supervisor_agent.py` |
+| 9 | Retrieval Agent | `src/careconnect/agents/retrieval_agent.py` |
+| 10 | Document-Processing Agent | `src/careconnect/agents/document_processing_agent.py` |
+| 11 | Task/Tool Agent + Gateway | `lambda-functions/careconnect-mock-hospital-tools/`, `src/careconnect/agents/task_tool_agent.py` |
+| 12 | Verification Agent | `src/careconnect/agents/verification_agent.py` |
+| 13 | Escalation Agent | `src/careconnect/agents/escalation_agent.py` (DynamoDB + Step Functions) |
+| 14 | Supervisor Agent | `src/careconnect/agents/supervisor_agent.py` |
 | 15 | Deploy to AgentCore Runtime | AgentCore CLI on EC2 |
 | 16 | API Gateway endpoint | `lambda-functions/careconnect-agentcore-proxy/` |
 | 17 | Frontend (S3 + CloudFront) | `frontend/config.js` |
@@ -187,8 +187,9 @@ CareConnect uses **defense in depth** rather than trusting any single control:
 
 ## Important notes
 
-- **All agent files must live in the same folder** (`agents/`) on your EC2 dev box —
-  `supervisor_agent.py` imports the other agents.
+- **All agent files must live in the same folder** (`src/careconnect/agents/`) on your EC2 dev box —
+  `supervisor_agent.py` imports the other agents. Run it from the repo root with
+  `PYTHONPATH=src python3 -m careconnect.agents.supervisor_agent`.
 - **Lambda function names matter** — components call them by name (e.g. the verifier invokes
   `careconnect-deterministic-safety`). Rename one and you must update its references.
 - **All hospital data is synthetic.** A staged refill is never actually submitted

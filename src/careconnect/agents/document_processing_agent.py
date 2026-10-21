@@ -13,7 +13,7 @@ HOW TO USE
   1. Save the Retrieval Agent's output into a file named:
          retrieved_passages.txt
   2. Run it:
-         python document_processing_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.document_processing_agent
   The script reads retrieved_passages.txt and prints the structured output.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
@@ -21,13 +21,11 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
     exists and contains the evidence you want structured.
 """
 
-from strands import Agent
 
 # ---------------------------------------------------------------------------
 # The agent: strict rules so it only restructures approved evidence.
 # ---------------------------------------------------------------------------
-docproc_agent = Agent(
-    system_prompt="""
+SYSTEM_PROMPT = """
 You are the CareConnect Document Processing Agent for Riverside Health.
 Your responsibility is to transform retrieved approved-document
 passages into clear and structured information for downstream agents.
@@ -52,7 +50,12 @@ If the supplied passages do not contain enough information, state:
 to create the requested structured output."
 Do not fill missing information using outside knowledge.
 """
-)
+
+
+def get_docproc_agent():
+    from strands import Agent
+
+    return Agent(system_prompt=SYSTEM_PROMPT)
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +70,7 @@ Process the following retrieved Riverside Health evidence.
 Create a clear structured output using only the evidence above.
 Preserve any Source information exactly as provided.
 """
-    response = docproc_agent(prompt)
+    response = get_docproc_agent()(prompt)
     return str(response)
 
 

@@ -16,15 +16,15 @@ WHAT THIS AGENT DOES
 
 >>> IMPORTANT FOR LEARNERS <<<
   All FOUR agent files (retrieval_agent.py, task_tool_agent.py,
-  escalation_agent.py, verification_agent.py) MUST be in the SAME folder as this
-  file, because this script imports from them.
+  escalation_agent.py, verification_agent.py) live in the same package as this
+  file (careconnect.agents), and this script imports from them.
 
 HOW TO USE
   1. Export all the environment variables first (KB ID, Gateway URL, Guardrail
      ID/version, State Machine ARN) — see the "environment variables" block in
      the guide. Each is marked ">>> LEARNERS" below where it's used.
   2. Run it:
-         python supervisor_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.supervisor_agent
   3. Type a patient request; type 'exit' to stop.
 """
 
@@ -32,9 +32,10 @@ import os
 import re
 import time
 
-# These imports require the specialist files to be in the same directory.
-from escalation_agent import escalate
-from verification_agent import verify
+# Specialist agents live in the same package; run with PYTHONPATH=src.
+from careconnect.agents.escalation_agent import escalate
+from careconnect.agents.verification_agent import get_guardrail_settings, verify
+from careconnect.supervisor_model import load_supervisor_model
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ def run_retrieval(request, state):
     # >>> LEARNERS: export CARECONNECT_KB_ID="<your-kb-id>"
     if not os.environ.get("CARECONNECT_KB_ID"):
         return {"answer": "[retrieval skipped: CARECONNECT_KB_ID not set]", "passages": ""}
-    from retrieval_agent import search_docs
+    from careconnect.agents.retrieval_agent import search_docs
     all_passages = search_docs(request)
     # Keep only the single top-ranked passage. Semantic search returns several
     # loosely-related chunks; extra ones (e.g. triage/dosage text) can trip the
@@ -138,12 +139,13 @@ def run_task_tool(request, state):
     # >>> LEARNERS: export CARECONNECT_GATEWAY_URL="<your-gateway-mcp-url>"
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
         return "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]"
+    model = load_supervisor_model()  # a config error must not read as a gateway error
     try:
-        from task_tool_agent import mcp_client, SYSTEM_PROMPT
+        from careconnect.agents.task_tool_agent import SYSTEM_PROMPT, get_mcp_client
         from strands import Agent
-        with mcp_client:
+        with get_mcp_client() as mcp_client:
             tools = mcp_client.list_tools_sync()
-            agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools)
+            agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=model)
             return str(agent(request))
     except Exception as exc:
         return f"[task/tool agent error - gateway call failed: {exc}]"
@@ -246,6 +248,8 @@ def supervisor_flow(request):
 # Interactive terminal loop.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    get_guardrail_settings()  # fail closed: refuse to start without a Guardrail
+    load_supervisor_model()  # and without a valid model config
     print("\nCareConnect Supervisor Agent")
     print("Type 'exit' to stop.\n")
 

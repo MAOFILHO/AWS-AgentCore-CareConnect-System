@@ -16,7 +16,7 @@ HOW TO USE
   2. (Optional) set the region if not us-east-1:
          export AWS_REGION="us-east-1"
   3. Run it:
-         python task_tool_agent.py
+         PYTHONPATH=src python3 -m careconnect.agents.task_tool_agent
   4. Try: "Check the appointment status for PATIENT-DEMO-001."; type 'exit' to stop.
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
@@ -25,20 +25,22 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 """
 
 import os
-from strands import Agent
-from strands.tools.mcp.mcp_client import MCPClient
-from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
 
 # ---------------------------------------------------------------------------
 # Read the Gateway URL from an environment variable.
 # UPDATE THIS by exporting CARECONNECT_GATEWAY_URL before running.
 # ---------------------------------------------------------------------------
-GATEWAY_URL = os.environ.get("CARECONNECT_GATEWAY_URL")
-if not GATEWAY_URL:
-    raise ValueError("CARECONNECT_GATEWAY_URL is not configured.")
+# It is read when the client is built, not when this file is imported.
+def get_gateway_url():
+    url = os.environ.get("CARECONNECT_GATEWAY_URL")
+    if not url:
+        raise ValueError("CARECONNECT_GATEWAY_URL is not configured.")
+    return url
+
 
 # UPDATE THIS if you built in a different region.
-AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+def get_aws_region():
+    return os.environ.get("AWS_REGION", "us-east-1")
 
 
 # ---------------------------------------------------------------------------
@@ -46,14 +48,19 @@ AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 # that lets the agent discover and call the Gateway's tools.
 # ---------------------------------------------------------------------------
 def create_transport():
+    from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
+
     return aws_iam_streamablehttp_client(
-        endpoint=GATEWAY_URL,
-        aws_region=AWS_REGION,
+        endpoint=get_gateway_url(),
+        aws_region=get_aws_region(),
         aws_service="bedrock-agentcore",
     )
 
 
-mcp_client = MCPClient(create_transport)
+def get_mcp_client():
+    from strands.tools.mcp.mcp_client import MCPClient
+
+    return MCPClient(create_transport)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +96,9 @@ def main():
     print("\nCareConnect Task and Tool Agent")
     print("Type 'exit' to stop.\n")
 
-    with mcp_client:
+    from strands import Agent
+
+    with get_mcp_client() as mcp_client:
         tools = mcp_client.list_tools_sync()
         print("Gateway tools loaded successfully.\n")
 
