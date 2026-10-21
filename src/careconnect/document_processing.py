@@ -20,10 +20,16 @@ class FakeDocumentProcessor:
     def process(self, passages):
         if len(re.findall(SEQUENCE_HEADING, passages, re.IGNORECASE | re.MULTILINE)) < 2:
             return DocumentProcessingResult(format="text", text=passages)
-        steps = [
-            line.strip()
-            for line in passages.splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        text = "\n".join(f"{i}. {step}" for i, step in enumerate(steps, 1))
-        return DocumentProcessingResult(format="checklist", text=text)
+        lines = []
+        n = 0
+        for line in passages.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                n = 0
+                lines.append(line.lstrip("#").strip())
+            else:
+                n += 1
+                lines.append(f"{n}. {line}")
+        return DocumentProcessingResult(format="checklist", text="\n".join(lines))

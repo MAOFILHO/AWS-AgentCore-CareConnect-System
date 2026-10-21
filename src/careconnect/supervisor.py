@@ -10,7 +10,8 @@ ESCALATION_NOTICE = "A licensed clinician will follow up with you."
 
 
 def supervisor_flow(
-    request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None
+    request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
+    approved=None,
 ):
     gate = classify(request)
     outcome = {"request_id": str(uuid.uuid4()), "citations": [], "escalation": None}
@@ -31,7 +32,7 @@ def supervisor_flow(
     if gate["injection"]:
         return {**outcome, "decision": "block", "reply": "I can't help with that request."}
     hits = [(name, sanitize_retrieved(text)) for name, text in knowledge_base.retrieve(request)]
-    hits = [(name, text) for name, text in hits if text]
+    hits = [(name, text) for name, text in hits if text and (approved is None or name in approved)]
     if not hits:
         return {**outcome, "decision": "allow", "reply": NO_ANSWER}
     draft = "\n".join(passage for _, passage in hits)
