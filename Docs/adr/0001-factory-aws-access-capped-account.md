@@ -11,3 +11,4 @@ Factory runs may call real AWS services (Bedrock, Knowledge Base, DynamoDB, Step
 - The first deploy lets the factory use Bedrock and DynamoDB. Lambda, Step Functions, S3, S3 Vectors and service roles are added to the factory role by the first ticket that needs each one.
 - The budget action stops new factory calls. It does not tear down resources that already exist, so those rely on the destroy-on-PR-close rule.
 - The factory-account stack is permanent and exempt from destroy-on-PR-close.
+- The account may already hold a GitHub OIDC provider (AWS allows one per account). Pass its ARN as `ExistingOidcProviderArn` and the stack reuses it instead of creating one. The $20 budget and its stop action apply to the factory role only, not to other projects in a shared account.
