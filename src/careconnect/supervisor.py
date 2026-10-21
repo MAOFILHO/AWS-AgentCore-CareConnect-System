@@ -3,7 +3,6 @@
 import uuid
 
 from careconnect.budget import BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, load_budgets
-from careconnect.fakes import FakeCostMeter
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
 from careconnect.verification import verify
 
@@ -13,29 +12,28 @@ ESCALATION_NOTICE = "A licensed clinician will follow up with you."
 
 def supervisor_flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
-    *, approved, budgets=None, cost_meter=None, clock=None,
+    *, approved, cost_meter, budgets=None, clock=None,
 ):
-    tracker = BudgetTracker(
-        budgets or load_budgets(), cost_meter or FakeCostMeter(), *([clock] if clock else [])
-    )
+    tracker = BudgetTracker(budgets or load_budgets(), cost_meter, clock)
+    request_id = str(uuid.uuid4())
     try:
         return _flow(
             request, knowledge_base, ticket_store, grounding, guardrail, document_processor,
-            approved, tracker,
+            approved, tracker, request_id,
         )
     except BudgetExceeded:
         return {
-            "request_id": str(uuid.uuid4()), "citations": [], "escalation": None,
+            "request_id": request_id, "citations": [], "escalation": None,
             "decision": "stop", "reply": BUDGET_MESSAGE,
         }
 
 
 def _flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor,
-    approved, tracker,
+    approved, tracker, request_id,
 ):
     gate = classify(request)
-    outcome = {"request_id": str(uuid.uuid4()), "citations": [], "escalation": None}
+    outcome = {"request_id": request_id, "citations": [], "escalation": None}
 
     def escalate():
         ticket = ticket_store.create(

@@ -1,6 +1,7 @@
 import unittest
 
 from careconnect.fakes import (
+    FakeCostMeter,
     FakeEscalationTicketStore,
     FakeGrounding,
     FakeGuardrail,
@@ -21,6 +22,7 @@ class VerificationGateTest(unittest.TestCase):
             grounding=grounding or FakeGrounding(),
             guardrail=guardrail or FakeGuardrail(),
             approved=set(documents),
+            cost_meter=FakeCostMeter(),
         )
 
     def assert_notice_only(self, out):
