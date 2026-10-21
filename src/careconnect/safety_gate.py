@@ -67,8 +67,10 @@ PII_PATTERNS = {
 # should be stripped out before the document is used.
 INSTRUCTION_LINE_PATTERNS = [
     r"ignore\s+(all\s+)?(previous\s+)?instructions",
-    r"override .*instructions",
-    r"disregard (all )?(previous )?instructions",
+    r"override\s.*instructions",
+    r"disregard\s+(all\s+)?(previous\s+)?instructions",
+    r"forget\s+(all\s+|your\s+)?(previous\s+)?instructions",
+    r"^\s*new\s+instructions\s*:",
     r"^\s*\[?\s*system\s*\]?\s*:",
     r"\bsystem prompt\s*:",
     r"^\s*you are now\b",
@@ -112,7 +114,7 @@ def mask_pii(text):
 # after it up to the next blank line (anti prompt-injection). Fail closed.
 def sanitize_retrieved(text):
     text = unicodedata.normalize("NFKC", text)
-    text = re.sub(r"[\u200b-\u200f\u2060\ufeff]", "", text)
+    text = re.sub(r"[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]", "", text)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     text = re.sub(r"<!--.*", "", text, flags=re.DOTALL)
     safe_lines = []

@@ -20,6 +20,7 @@ class VerificationGateTest(unittest.TestCase):
             FakeEscalationTicketStore(),
             grounding=grounding or FakeGrounding(),
             guardrail=guardrail or FakeGuardrail(),
+            approved=set(documents),
         )
 
     def assert_notice_only(self, out):
