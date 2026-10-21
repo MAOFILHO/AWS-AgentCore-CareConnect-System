@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CareConnect factory account (ADR 0001): $20 monthly budget with alerts at 50% and 90%,
+  GitHub OIDC sign-in, and a factory role with 1-hour credentials that denies NAT Gateway,
+  provisioned search clusters and provisioned concurrency. At 100% of the budget a budget
+  action attaches a deny-all policy to the role. Beyond the ADR's three denies it also denies Bedrock
+  provisioned throughput, model customization jobs, DynamoDB reserved capacity and OpenSearch Serverless collections (each bills
+  above the cap). The role allows only Bedrock and DynamoDB. Access to Lambda, Step Functions, S3, S3 Vectors and
+  service roles is added by the first ticket that needs it.
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: MAOFILHO/AWS-AgentCore-CareConnect-System
+    Description: owner/repo allowed to assume the role
+  AlertEmail:
+    Type: String
+    Description: Address that receives the budget alerts
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "24" }
+        - { Key: lifecycle, Value: permanent }
+
+  FactoryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: careconnect-factory
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt GitHubOidcProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GitHubRepo}:pull_request"
+                  - !Sub "repo:${GitHubRepo}:ref:refs/heads/sandcastle/*"
+                  - !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: factory-services
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:*
+                  - dynamodb:*
+                  - tag:GetResources
+                Resource: "*"
+              - Effect: Deny
+                Action:
+                  - ec2:CreateNatGateway
+                  - es:CreateDomain
+                  - es:CreateElasticsearchDomain
+                  - lambda:PutProvisionedConcurrencyConfig
+                  - aoss:CreateCollection
+                  - bedrock:CreateProvisionedModelThroughput
+                  - bedrock:UpdateProvisionedModelThroughput
+                  - bedrock:CreateModelCustomizationJob
+                  - dynamodb:PurchaseReservedCapacityOfferings
+                Resource: "*"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "24" }
+        - { Key: lifecycle, Value: permanent }
+
+  BudgetStopPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: careconnect-factory-budget-stop
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Deny
+            Action: "*"
+            Resource: "*"
+
+  BudgetActionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: budgets-careconnect-stop
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "24" }
+        - { Key: lifecycle, Value: permanent }
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: budgets.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: attach-stop-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !GetAtt FactoryRole.Arn
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN: !Ref BudgetStopPolicy
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      ResourceTags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "24" }
+        - { Key: lifecycle, Value: permanent }
+      Budget:
+        BudgetName: careconnect-factory-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: 20
+          Unit: USD
+        CostTypes:
+          IncludeCredit: false
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 50
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 90
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
+
+  BudgetStopAction:
+    Type: AWS::Budgets::BudgetsAction
+    Properties:
+      BudgetName: !Ref MonthlyBudget
+      NotificationType: ACTUAL
+      ActionType: APPLY_IAM_POLICY
+      ActionThreshold:
+        Type: PERCENTAGE
+        Value: 100
+      ResourceTags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "24" }
+        - { Key: lifecycle, Value: permanent }
+      ApprovalModel: AUTOMATIC
+      ExecutionRoleArn: !GetAtt BudgetActionRole.Arn
+      Definition:
+        IamActionDefinition:
+          PolicyArn: !Ref BudgetStopPolicy
+          Roles:
+            - !Ref FactoryRole
+      Subscribers:
+        - { Type: EMAIL, Address: !Ref AlertEmail }
+
+Outputs:
+  FactoryRoleArn:
+    Value: !GetAtt FactoryRole.Arn
+    Description: Set this as the AWS role to assume in the GitHub workflow
