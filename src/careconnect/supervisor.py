@@ -2,7 +2,6 @@
 
 import uuid
 
-from careconnect.fakes import FakeGrounding, FakeGuardrail
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
 from careconnect.verification import verify
 
@@ -11,7 +10,7 @@ ESCALATION_NOTICE = "A licensed clinician will follow up with you."
 
 
 def supervisor_flow(
-    request, knowledge_base, ticket_store, grounding=None, guardrail=None
+    request, knowledge_base, ticket_store, grounding, guardrail
 ):
     gate = classify(request)
     outcome = {"request_id": str(uuid.uuid4()), "citations": [], "escalation": None}
@@ -38,7 +37,7 @@ def supervisor_flow(
     draft = "\n".join(passage for _, passage in hits)
     citations = [name for name, _ in hits]
     result = verify(
-        draft, citations, dict(hits), grounding or FakeGrounding(), guardrail or FakeGuardrail()
+        draft, citations, dict(hits), grounding, guardrail
     )
     if result.status != "PASS":
         return escalate()
