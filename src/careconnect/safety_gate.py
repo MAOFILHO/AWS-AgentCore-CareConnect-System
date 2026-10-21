@@ -69,7 +69,8 @@ INSTRUCTION_LINE_PATTERNS = [
     r"^\s*ignore all previous instructions",
     r"^\s*override .*instructions",
     r"^\s*disregard previous instructions",
-    r"^\s*system\s*:",
+    r"^\s*\[?system\]?\s*:",
+    r"^\s*you are now\b",
     r"^\s*developer\s*:",
     r"^\s*assistant\s*:",
 ]
@@ -106,15 +107,18 @@ def mask_pii(text):
     return masked
 
 
-# Remove instruction-like lines from a retrieved document (anti prompt-injection).
+# Remove HTML comments, then drop each instruction-like line and the lines
+# after it up to the next blank line (anti prompt-injection). Fail closed.
 def sanitize_retrieved(text):
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     safe_lines = []
+    injected = False
     for line in text.splitlines():
-        suspicious = any(
-            re.search(pattern, line, re.IGNORECASE)
-            for pattern in INSTRUCTION_LINE_PATTERNS
-        )
-        if not suspicious:
+        if not line.strip():
+            injected = False
+        elif any(re.search(p, line, re.IGNORECASE) for p in INSTRUCTION_LINE_PATTERNS):
+            injected = True
+        if not injected:
             safe_lines.append(line)
     return "\n".join(safe_lines)
 
