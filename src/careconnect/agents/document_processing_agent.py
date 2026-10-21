@@ -54,8 +54,9 @@ Do not fill missing information using outside knowledge.
 
 def get_docproc_agent():
     from strands import Agent
+    from careconnect.supervisor_model import load_supervisor_model
 
-    return Agent(system_prompt=SYSTEM_PROMPT)
+    return Agent(system_prompt=SYSTEM_PROMPT, model=load_supervisor_model())
 
 
 # ---------------------------------------------------------------------------

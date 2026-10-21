@@ -135,8 +135,9 @@ Do not fill information gaps using outside knowledge.
 
 def get_retrieval_agent():
     from strands import Agent
+    from careconnect.supervisor_model import load_supervisor_model
 
-    return Agent(system_prompt=SYSTEM_PROMPT, tools=[search_docs])
+    return Agent(system_prompt=SYSTEM_PROMPT, tools=[search_docs], model=load_supervisor_model())
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +147,7 @@ if __name__ == "__main__":
     print("\nCareConnect Retrieval Agent")
     print("Type 'exit' to stop.\n")
 
+    agent = get_retrieval_agent()  # built once, so chat history is kept
     while True:
         question = input("Patient question: ").strip()
 
@@ -156,7 +158,7 @@ if __name__ == "__main__":
         if not question:
             continue
 
-        response = get_retrieval_agent()(question)
+        response = agent(question)
         print("\nResponse:\n")
         print(response)
         print()
