@@ -65,6 +65,22 @@ class DeployableSupervisorTest(unittest.TestCase):
                 out = self.flow("visiting hours", status=status)
                 self.assertEqual(out["draft_response"], ESCALATION_NOTICE)
 
+    def test_not_pass_creates_a_ticket_before_promising_follow_up(self):
+        out = self.flow("visiting hours", status="FAIL")
+        self.escalate.assert_called_once()
+        self.assertEqual(out["draft_response"], ESCALATION_NOTICE)
+
+    def test_not_pass_with_ticket_failure_promises_nothing(self):
+        verify = mock.Mock(return_value={"verification_status": "FAIL"})
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=PASSAGES))
+        with mock.patch.object(supervisor_agent, "verify", verify), \
+                mock.patch.object(supervisor_agent, "escalate", side_effect=RuntimeError("x")), \
+                mock.patch.dict(sys.modules, {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
+                mock.patch("builtins.open", mock.mock_open(read_data="")):
+            out = supervisor_agent.supervisor_flow("visiting hours", cost_meter=FakeCostMeter())
+        self.assertEqual(out["draft_response"], supervisor_agent.ESCALATION_FAILED_NOTICE)
+
     def test_verification_that_raises_withholds_draft(self):
         out = self.flow("visiting hours", verify_error=RuntimeError("apply_guardrail failed"))
         self.assertEqual(out["draft_response"], ESCALATION_NOTICE)

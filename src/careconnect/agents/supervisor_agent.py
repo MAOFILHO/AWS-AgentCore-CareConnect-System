@@ -197,6 +197,19 @@ def verify_response(draft, evidence, state):
         return {"verification_status": "ERROR", "reason": str(exc)}
 
 
+def escalation_notice(request):
+    """Open the clinician ticket first; promise a follow-up only if it exists."""
+    try:
+        escalate(
+            reason="Answer could not be verified.",
+            category="unverified_answer",
+            request_details={"patient_request": mask_pii(request)},
+        )
+    except Exception:
+        return ESCALATION_FAILED_NOTICE
+    return ESCALATION_NOTICE
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator — ties the five stages together.
 # ---------------------------------------------------------------------------
@@ -223,10 +236,10 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         result = "escalation_failed" if clinical else "flow_failed"
         log.error("request_id=%s safety_gate=%s outcome=%s", request_id,
                   "escalate" if clinical else "allow", result)
-        notice = ESCALATION_FAILED_NOTICE if clinical else ESCALATION_NOTICE
+        notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
         return {**outcome, "draft_response": notice}
     if verification.get("verification_status") != "PASS":
-        draft = ESCALATION_NOTICE  # withhold the draft
+        draft = escalation_notice(request)  # withhold the draft
     return {**outcome, "draft_response": draft, "verification": verification}
 
 

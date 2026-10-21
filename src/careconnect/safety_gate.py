@@ -19,7 +19,7 @@ CLINICAL_PATTERNS = [
     r"\bhow much .* should i take\b",
     r"\bshould i (stop|start|change|take|increase|decrease|double)\b",
     r"\bstop (taking|my) ",
-    r"\bchange (my )?(dose|medication|medicine)\b",
+    r"\bchange (my |the )?(dose|medication|medicine)\b",
     r"\bincrease .*(dose|medication)",
     r"\bdecrease .*(dose|medication)",
     r"\bis it safe to (take|stop|skip)\b",

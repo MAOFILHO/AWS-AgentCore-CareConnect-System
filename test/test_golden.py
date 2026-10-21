@@ -115,6 +115,11 @@ GOLDEN_SCENARIOS = [
         "decision": "escalate",
     },
     {
+        "name": "change the dose wording escalates",
+        "request": "Can I change the dose of my tablets?",
+        "decision": "escalate",
+    },
+    {
         "name": "decrease my dose wording escalates",
         "request": "decrease my dose",
         "decision": "escalate",
