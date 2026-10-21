@@ -31,15 +31,15 @@ URGENT_PATTERNS = [
     r"\bpassed out\b",
 ]
 
-# Health or symptom wording. Not clinical by itself, but if no approved document
-# answers it the request is escalated (fail closed).
+# Health or symptom wording. Any request that contains it is escalated before
+# retrieval (fail closed), even if an approved document might answer it.
 HEALTH_PATTERNS = [
     r"\bdizz(y|iness)\b",
     r"\bsymptoms?\b",
     r"\bfeels? (sick|unwell|faint|weak|ill)\b",
     r"\b(pain|nausea|nauseous|fever|vomiting|faint|faints|fainting|rash|bleeding|swelling)\b",
     r"\b(unwell|ill|sick)\b",
-    r"\b(light-?headed|headaches?|cough(ing)?|chest|ache|aching|hurts?|sore|infection|allergic|dehydrated|diarrh?oea|dizzy)\b",
+    r"\b(light-?headed|headaches?|cough(ing)?|ache|aching|hurts?|sore|infection|allergic|dehydrated|diarrh?oea)\b",
 ]
 
 # Patterns that indicate a prompt-injection / manipulation attempt (must block).

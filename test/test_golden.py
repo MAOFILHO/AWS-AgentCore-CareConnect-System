@@ -48,4 +48,4 @@ class GoldenScenarioTest(unittest.TestCase):
                 tickets = FakeEscalationTicketStore()
                 out = supervisor_flow(scenario["request"], kb, tickets)
                 self.assertEqual(out["decision"], scenario["decision"])
-                self.assertEqual(len(tickets.tickets), 1)
+                self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
