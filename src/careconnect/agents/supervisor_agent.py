@@ -28,7 +28,9 @@ HOW TO USE
   3. Type a patient request; type 'exit' to stop.
 """
 
+import logging
 import os
+import uuid
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
 from careconnect.agents.escalation_agent import escalate
@@ -41,6 +43,11 @@ from careconnect.supervisor import ESCALATION_NOTICE
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
+ESCALATION_FAILED_NOTICE = (
+    "We could not pass your request to a clinician. Please contact Riverside Health "
+    "directly, or call emergency services if your symptoms are urgent."
+)
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +202,8 @@ def verify_response(draft, evidence, state):
 # ---------------------------------------------------------------------------
 def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
     state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
-    outcome = {"request": request, "plan": [], "verification": {"verification_status": "n/a"}}
+    request_id = str(uuid.uuid4())
+    outcome = {"request_id": request_id, "request": request, "plan": [], "verification": {"verification_status": "n/a"}}
     try:
         safety = check_safety(request, state)
         outcome["safety"] = safety
@@ -210,8 +218,13 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "draft_response": BUDGET_MESSAGE}
-    except Exception:  # fail closed, but tell the patient
-        return {**outcome, "draft_response": ESCALATION_NOTICE}
+    except Exception:  # fail closed: never show the draft; no message text or error text in logs
+        clinical = bool(outcome.get("safety", {}).get("clinical_detected"))
+        result = "escalation_failed" if clinical else "flow_failed"
+        log.error("request_id=%s safety_gate=%s outcome=%s", request_id,
+                  "escalate" if clinical else "allow", result)
+        notice = ESCALATION_FAILED_NOTICE if clinical else ESCALATION_NOTICE
+        return {**outcome, "draft_response": notice}
     if verification.get("verification_status") != "PASS":
         draft = ESCALATION_NOTICE  # withhold the draft
     return {**outcome, "draft_response": draft, "verification": verification}
