@@ -13,6 +13,7 @@ CareConnect is a patient-support assistant for the fictional Riverside Health ho
 ## Setup (fresh checkout)
 ```bash
 npm ci || npm install
+python3 -m pip install -r requirements.txt
 ```
 
 ## Dev server
