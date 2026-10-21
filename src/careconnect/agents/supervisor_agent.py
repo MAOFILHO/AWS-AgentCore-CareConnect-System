@@ -34,7 +34,7 @@ import time
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
 from careconnect.agents.escalation_agent import escalate
-from careconnect.agents.verification_agent import verify
+from careconnect.agents.verification_agent import get_guardrail_settings, verify
 from careconnect.supervisor_model import load_supervisor_model
 
 
@@ -248,6 +248,7 @@ def supervisor_flow(request):
 # Interactive terminal loop.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    get_guardrail_settings()  # fail closed: refuse to start without a Guardrail
     print("\nCareConnect Supervisor Agent")
     print("Type 'exit' to stop.\n")
 
