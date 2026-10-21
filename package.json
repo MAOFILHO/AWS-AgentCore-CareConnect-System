@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "golden": "PYTHONPATH=src python3 -m unittest discover -s test -p test_golden.py",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "build": "echo 'no build step yet'"

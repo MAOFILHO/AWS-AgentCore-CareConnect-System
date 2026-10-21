@@ -20,6 +20,8 @@ jobs:
       - run: npm test
       - run: python3 -m pip install -r requirements.txt
       - run: PYTHONPATH=src python3 -m unittest discover -s test
+      # Deliberate release gate: re-runs test_golden.py on its own so a golden failure is named in the PR checks.
+      - run: npm run golden
       - run: npm run typecheck --if-present
       - run: npm run lint --if-present
       - run: npm run build --if-present
