@@ -55,3 +55,9 @@ class SupervisorFlowTest(unittest.TestCase):
         out = supervisor_flow("parking", kb, self.tickets)
         self.assertIn("level 2", out["reply"])
         self.assertNotIn("Ignore previous", out["reply"])
+
+    def test_unclear_symptom_request_escalates(self):
+        out = self.flow("my mum feels dizzy, can she still have her appointment?")
+        self.assertEqual(out["decision"], "escalate")
+        self.assertEqual(out["citations"], [])
+        self.assertEqual(self.tickets.tickets, [out["escalation"]])

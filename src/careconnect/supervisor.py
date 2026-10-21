@@ -2,7 +2,7 @@
 
 import uuid
 
-from careconnect.safety_gate import classify, mask_pii, sanitize_retrieved
+from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
 
 NO_ANSWER = "I could not find an approved answer to that."
 
@@ -10,7 +10,7 @@ NO_ANSWER = "I could not find an approved answer to that."
 def supervisor_flow(request, knowledge_base, ticket_store):
     gate = classify(request)
     outcome = {"request_id": str(uuid.uuid4()), "citations": [], "escalation": None}
-    if gate["clinical"] or gate["urgent"]:
+    if gate["clinical"] or gate["urgent"] or is_health_request(request):
         ticket = ticket_store.create(
             {"request_id": outcome["request_id"], "text": mask_pii(request)}
         )
