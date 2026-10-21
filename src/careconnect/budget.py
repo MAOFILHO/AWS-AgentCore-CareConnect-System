@@ -43,3 +43,12 @@ class BudgetTracker:
             or self.cost_meter.total > self.budgets.max_cost_usd
         ):
             raise BudgetExceeded(name)
+
+
+class UnmeteredCost:
+    """Cost meter for the deployable Supervisor: no price feed yet, so cost stays 0."""
+
+    total = 0.0
+
+    def charge(self, name):
+        pass

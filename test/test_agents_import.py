@@ -82,6 +82,18 @@ class AgentImportTest(unittest.TestCase):
             verification.get_verification_agent()
         self.assertEqual(agent_class.call_args.kwargs["model"], load_supervisor_model())
 
+    def test_retrieval_and_docproc_agents_get_the_configured_model(self):
+        for name, getter in (
+            ("retrieval_agent", "get_retrieval_agent"),
+            ("document_processing_agent", "get_docproc_agent"),
+        ):
+            with self.subTest(agent=name):
+                mod = self.import_clean(f"careconnect.agents.{name}")
+                agent_class = mock.MagicMock()
+                with mock.patch.dict(sys.modules, {"strands": mock.MagicMock(Agent=agent_class)}):
+                    getattr(mod, getter)()
+                self.assertEqual(agent_class.call_args.kwargs["model"], load_supervisor_model())
+
 
 if __name__ == "__main__":
     unittest.main()

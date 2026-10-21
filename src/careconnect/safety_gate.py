@@ -13,12 +13,16 @@ CLINICAL_PATTERNS = [
     r"\bdiagnosis\b",
     r"\bwhat disease do i have\b",
     r"\bwhat condition do i have\b",
-    r"\bshould i take\b",
     r"\bshould i increase\b",
     r"\bshould i decrease\b",
     r"\bdouble (my|the) dose\b",
-    r"\bchange (my|the) dose\b",
     r"\bhow much .* should i take\b",
+    r"\bshould i (stop|start|change|take|increase|decrease|double)\b",
+    r"\bstop (taking|my) ",
+    r"\bchange (my |the )?(dose|medication|medicine)\b",
+    r"\bincrease .*(dose|medication)",
+    r"\bdecrease .*(dose|medication)",
+    r"\bis it safe to (take|stop|skip)\b",
 ]
 
 # Patterns that indicate an URGENT / emergency situation (must be escalated).

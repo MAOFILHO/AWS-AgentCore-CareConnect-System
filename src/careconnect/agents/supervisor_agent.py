@@ -28,63 +28,42 @@ HOW TO USE
   3. Type a patient request; type 'exit' to stop.
 """
 
+import logging
 import os
-import re
-import time
+import uuid
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
 from careconnect.agents.escalation_agent import escalate
 from careconnect.agents.verification_agent import get_guardrail_settings, verify
+from careconnect.budget import (
+    BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
+)
+from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
+from careconnect.supervisor import ESCALATION_NOTICE
 from careconnect.supervisor_model import load_supervisor_model
 
-
-# ---------------------------------------------------------------------------
-# Budgets — hard limits so the workflow can't loop or run too long/expensive.
-# ---------------------------------------------------------------------------
-class Budgets:
-    max_steps = 8
-    max_cost = 0.05
-    max_seconds = 30
-
-
-# Tracks how many steps we've taken and stops us if we blow the budget.
-class RunState:
-    def __init__(self):
-        self.steps = 0
-        self.start = time.time()
-
-    def spend_step(self, label):
-        self.steps += 1
-        if self.steps > Budgets.max_steps:
-            raise RuntimeError(
-                f"Budget exceeded: more than {Budgets.max_steps} steps."
-            )
-        if time.time() - self.start > Budgets.max_seconds:
-            raise RuntimeError(
-                f"Budget exceeded: over {Budgets.max_seconds} seconds."
-            )
-        print(f"[step {self.steps}] {label}")
+BLOCK_NOTICE = "I can't help with that request."
+ESCALATION_FAILED_NOTICE = (
+    "We could not pass your request to a clinician. Please contact Riverside Health "
+    "directly, or call emergency services if your symptoms are urgent."
+)
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# 1. Safety gate: detect clinical / dosage intent the AI must NEVER answer.
-#    >>> LEARNERS: REPLACE / EXTEND to match your guardrail's deny topics.
+# 1. Safety gate: the shared rules in careconnect.safety_gate decide.
+#    The Supervisor keeps no pattern list of its own.
 # ---------------------------------------------------------------------------
-CLINICAL_PATTERNS = [
-    r"should i (stop|start|change|take|increase|decrease|double)",
-    r"stop (taking|my) ",
-    r"change (my )?(dose|medication|medicine)",
-    r"increase .*(dose|medication)",
-    r"decrease .*(dose|medication)",
-    r"is it safe to (take|stop|skip)",
-]
-
-
 def check_safety(request, state):
-    state.spend_step("Safety Agent (input check)")
-    lowered = request.lower()
-    hits = [p for p in CLINICAL_PATTERNS if re.search(p, lowered)]
-    return {"clinical_detected": bool(hits), "matched": hits}
+    state.step("Safety gate (input check)")
+    gate = classify(request)
+    escalate_request = bool(
+        gate["clinical"] or gate["urgent"] or is_health_request(request)
+    )
+    return {
+        "clinical_detected": escalate_request,
+        "blocked": bool(gate["injection"]) and not escalate_request,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -100,15 +79,15 @@ OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
 
 
 def create_plan(request, safety, state):
-    state.spend_step("Create execution plan")
+    state.step("Create execution plan")
     lowered = request.lower()
     plan = []
+    if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
+        return [{"task": "Medication / clinical decision", "agent": "escalation"}]
     if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
     if any(k in lowered for k in OPERATIONAL_KEYWORDS):
         plan.append({"task": "Check operational status", "agent": "task"})
-    if safety["clinical_detected"]:
-        plan.append({"task": "Medication / clinical decision", "agent": "escalation"})
     if not plan:
         plan.append({"task": "General approved-information lookup", "agent": "retrieval"})
     for p in plan:
@@ -120,12 +99,12 @@ def create_plan(request, safety, state):
 # 3. Route + execute each task on its real specialist agent.
 # ---------------------------------------------------------------------------
 def run_retrieval(request, state):
-    state.spend_step("Retrieval Agent")
+    state.step("Retrieval Agent")
     # >>> LEARNERS: export CARECONNECT_KB_ID="<your-kb-id>"
     if not os.environ.get("CARECONNECT_KB_ID"):
         return {"answer": "[retrieval skipped: CARECONNECT_KB_ID not set]", "passages": ""}
     from careconnect.agents.retrieval_agent import search_docs
-    all_passages = search_docs(request)
+    all_passages = sanitize_retrieved(search_docs(request))
     # Keep only the single top-ranked passage. Semantic search returns several
     # loosely-related chunks; extra ones (e.g. triage/dosage text) can trip the
     # guardrail even for a simple question. Verifying against the best-matching
@@ -135,7 +114,7 @@ def run_retrieval(request, state):
 
 
 def run_task_tool(request, state):
-    state.spend_step("Task/Tool Agent (AgentCore Gateway / MCP)")
+    state.step("Task/Tool Agent (AgentCore Gateway / MCP)")
     # >>> LEARNERS: export CARECONNECT_GATEWAY_URL="<your-gateway-mcp-url>"
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
         return "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]"
@@ -152,13 +131,13 @@ def run_task_tool(request, state):
 
 
 def run_escalation(request, state):
-    state.spend_step("Escalation Agent")
+    state.step("Escalation Agent")
     # >>> LEARNERS: export CARECONNECT_STATE_MACHINE_ARN="<your-arn>"
     # Real side effects: writes a DynamoDB ticket + starts Step Functions.
     return escalate(
         reason="Medication/clinical decision requires clinician review.",
         category="clinical_question",
-        request_details={"patient_request": request},
+        request_details={"patient_request": mask_pii(request)},
     )
 
 
@@ -180,7 +159,7 @@ def execute_required_agents(request, plan, state):
 #    Returns BOTH the draft and the evidence (raw passages) it was built from.
 # ---------------------------------------------------------------------------
 def combine_safe_results(results, safety, state):
-    state.spend_step("Combine safe results")
+    state.step("Combine safe results")
     parts = []
     evidence = ""
     if "retrieval" in results:
@@ -198,10 +177,7 @@ def combine_safe_results(results, safety, state):
             f"status: {esc.get('status', 'pending_review')})"
         )
     elif safety["clinical_detected"]:
-        parts.append(
-            "Medication question:\n"
-            "Your medication question requires review by a licensed clinician."
-        )
+        parts.append(ESCALATION_NOTICE)
     return "\n\n".join(parts), evidence
 
 
@@ -210,13 +186,9 @@ def combine_safe_results(results, safety, state):
 #    Syncs retrieved_passages.txt so the verifier checks live evidence.
 # ---------------------------------------------------------------------------
 def verify_response(draft, evidence, state):
-    state.spend_step("Verification Agent")
+    state.step("Verification Agent")
     if not evidence.strip():
-        if os.path.exists("retrieved_passages.txt"):
-            with open("retrieved_passages.txt", "r", encoding="utf-8") as f:
-                evidence = f.read()
-        else:
-            return {"verification_status": "SKIPPED", "reason": "no evidence available"}
+        return {"verification_status": "SKIPPED", "reason": "no evidence available"}
     with open("retrieved_passages.txt", "w", encoding="utf-8") as f:
         f.write(evidence)
     try:
@@ -225,23 +197,50 @@ def verify_response(draft, evidence, state):
         return {"verification_status": "ERROR", "reason": str(exc)}
 
 
+def escalation_notice(request):
+    """Open the clinician ticket first; promise a follow-up only if it exists."""
+    try:
+        escalate(
+            reason="Answer could not be verified.",
+            category="unverified_answer",
+            request_details={"patient_request": mask_pii(request)},
+        )
+    except Exception:
+        return ESCALATION_FAILED_NOTICE
+    return ESCALATION_NOTICE
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator — ties the five stages together.
 # ---------------------------------------------------------------------------
-def supervisor_flow(request):
-    state = RunState()
-    safety = check_safety(request, state)
-    plan = create_plan(request, safety, state)
-    results = execute_required_agents(request, plan, state)
-    draft, evidence = combine_safe_results(results, safety, state)
-    verification = verify_response(draft, evidence, state)
-    return {
-        "request": request,
-        "safety": safety,
-        "plan": plan,
-        "draft_response": draft,
-        "verification": verification,
-    }
+def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
+    state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
+    request_id = str(uuid.uuid4())
+    outcome = {"request_id": request_id, "request": request, "plan": [], "verification": {"verification_status": "n/a"}}
+    try:
+        safety = check_safety(request, state)
+        outcome["safety"] = safety
+        if safety["blocked"]:
+            return {**outcome, "draft_response": BLOCK_NOTICE}
+        plan = create_plan(request, safety, state)
+        outcome["plan"] = plan
+        results = execute_required_agents(request, plan, state)
+        draft, evidence = combine_safe_results(results, safety, state)
+        if safety["clinical_detected"]:
+            return {**outcome, "draft_response": draft}
+        verification = verify_response(draft, evidence, state)
+    except BudgetExceeded:
+        return {**outcome, "draft_response": BUDGET_MESSAGE}
+    except Exception:  # fail closed: never show the draft; no message text or error text in logs
+        clinical = bool(outcome.get("safety", {}).get("clinical_detected"))
+        result = "escalation_failed" if clinical else "flow_failed"
+        log.error("request_id=%s safety_gate=%s outcome=%s", request_id,
+                  "escalate" if clinical else "allow", result)
+        notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
+        return {**outcome, "draft_response": notice}
+    if verification.get("verification_status") != "PASS":
+        draft = escalation_notice(request)  # withhold the draft
+    return {**outcome, "draft_response": draft, "verification": verification}
 
 
 # ---------------------------------------------------------------------------
@@ -263,11 +262,7 @@ if __name__ == "__main__":
         if not request:
             continue
 
-        try:
-            outcome = supervisor_flow(request)
-        except RuntimeError as exc:
-            print(f"\nStopped by budget: {exc}\n")
-            continue
+        outcome = supervisor_flow(request)
 
         print("\n--- Draft response ---\n")
         print(outcome["draft_response"])
