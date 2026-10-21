@@ -1,5 +1,7 @@
 """In-memory fakes for the Knowledge Base and the escalation ticket store."""
 
+import re
+
 
 class FakeKnowledgeBase:
     def __init__(self, documents):
@@ -34,7 +36,10 @@ class FakeGrounding:
     def check(self, draft, passages):
         if self.error:
             raise RuntimeError("grounding unavailable")
-        return self.grounded and all(line in "\n".join(passages) for line in draft.splitlines())
+        text = "\n".join(passages)
+        return self.grounded and all(
+            re.sub(r"^\d+\. ", "", line) in text for line in draft.splitlines()
+        )
 
 
 class FakeGuardrail:

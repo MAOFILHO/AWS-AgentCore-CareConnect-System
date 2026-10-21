@@ -2,6 +2,7 @@
 Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py."""
 
 import re
+import unicodedata
 
 # ---------------------------------------------------------------------------
 # Patterns that indicate a CLINICAL question (must be escalated, not answered).
@@ -65,11 +66,14 @@ PII_PATTERNS = {
 # Lines inside a RETRIEVED document that look like injected instructions and
 # should be stripped out before the document is used.
 INSTRUCTION_LINE_PATTERNS = [
-    r"^\s*ignore previous instructions",
-    r"^\s*ignore all previous instructions",
-    r"^\s*override .*instructions",
-    r"^\s*disregard previous instructions",
-    r"^\s*system\s*:",
+    r"ignore\s+(all\s+)?(previous\s+)?instructions",
+    r"override\s.*instructions",
+    r"disregard\s+(all\s+)?(previous\s+)?instructions",
+    r"forget\s+(all\s+|your\s+)?(previous\s+)?instructions",
+    r"^\s*new\s+instructions\s*:",
+    r"^\s*\[?\s*system\s*\]?\s*:",
+    r"\bsystem prompt\s*:",
+    r"^\s*you are now\b",
     r"^\s*developer\s*:",
     r"^\s*assistant\s*:",
 ]
@@ -106,15 +110,21 @@ def mask_pii(text):
     return masked
 
 
-# Remove instruction-like lines from a retrieved document (anti prompt-injection).
+# Remove HTML comments, then drop each instruction-like line and the lines
+# after it up to the next blank line (anti prompt-injection). Fail closed.
 def sanitize_retrieved(text):
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]", "", text)
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    text = re.sub(r"<!--.*", "", text, flags=re.DOTALL)
     safe_lines = []
+    injected = False
     for line in text.splitlines():
-        suspicious = any(
-            re.search(pattern, line, re.IGNORECASE)
-            for pattern in INSTRUCTION_LINE_PATTERNS
-        )
-        if not suspicious:
+        if not line.strip():
+            injected = False
+        elif any(re.search(p, line, re.IGNORECASE) for p in INSTRUCTION_LINE_PATTERNS):
+            injected = True
+        if not injected:
             safe_lines.append(line)
     return "\n".join(safe_lines)
 

@@ -52,7 +52,8 @@ class GoldenScenarioTest(unittest.TestCase):
                 kb = FakeKnowledgeBase({p.name: p.read_text() for p in APPROVED.glob("*.md")})
                 tickets = FakeEscalationTicketStore()
                 out = supervisor_flow(
-                    scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail()
+                    scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
+                    approved=set(kb.documents),
                 )
                 self.assertEqual(out["decision"], scenario["decision"])
                 self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
