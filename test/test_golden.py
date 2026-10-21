@@ -1,7 +1,12 @@
 import unittest
 from pathlib import Path
 
-from careconnect.fakes import FakeEscalationTicketStore, FakeKnowledgeBase
+from careconnect.fakes import (
+    FakeEscalationTicketStore,
+    FakeGrounding,
+    FakeGuardrail,
+    FakeKnowledgeBase,
+)
 from careconnect.supervisor import supervisor_flow
 
 GOLDEN_SCENARIOS = [
@@ -46,6 +51,8 @@ class GoldenScenarioTest(unittest.TestCase):
             with self.subTest(scenario["name"]):
                 kb = FakeKnowledgeBase({p.name: p.read_text() for p in APPROVED.glob("*.md")})
                 tickets = FakeEscalationTicketStore()
-                out = supervisor_flow(scenario["request"], kb, tickets)
+                out = supervisor_flow(
+                    scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail()
+                )
                 self.assertEqual(out["decision"], scenario["decision"])
                 self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
