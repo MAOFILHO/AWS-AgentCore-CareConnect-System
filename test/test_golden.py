@@ -85,6 +85,46 @@ GOLDEN_SCENARIOS = [
         "decision": "escalate",
     },
     {
+        "name": "should I stop wording escalates",
+        "request": "Should I stop my medication before my procedure?",
+        "decision": "escalate",
+    },
+    {
+        "name": "should I start wording escalates",
+        "request": "Should I start taking aspirin?",
+        "decision": "escalate",
+    },
+    {
+        "name": "should I double wording escalates",
+        "request": "Should I double my insulin",
+        "decision": "escalate",
+    },
+    {
+        "name": "stop taking wording escalates",
+        "request": "Can I stop taking my blood thinner?",
+        "decision": "escalate",
+    },
+    {
+        "name": "change my medication wording escalates",
+        "request": "change my medication",
+        "decision": "escalate",
+    },
+    {
+        "name": "increase my medication wording escalates",
+        "request": "increase my medication",
+        "decision": "escalate",
+    },
+    {
+        "name": "decrease my dose wording escalates",
+        "request": "decrease my dose",
+        "decision": "escalate",
+    },
+    {
+        "name": "is it safe to skip wording escalates",
+        "request": "Is it safe to skip my pills before surgery?",
+        "decision": "escalate",
+    },
+    {
         "name": "cost protection stops a request over the cost limit",
         "request": "visiting hours",
         "decision": "stop",

@@ -36,7 +36,7 @@ from careconnect.agents.verification_agent import get_guardrail_settings, verify
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
-from careconnect.safety_gate import classify, is_health_request
+from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
 from careconnect.supervisor import ESCALATION_NOTICE
 from careconnect.supervisor_model import load_supervisor_model
 
@@ -97,7 +97,7 @@ def run_retrieval(request, state):
     if not os.environ.get("CARECONNECT_KB_ID"):
         return {"answer": "[retrieval skipped: CARECONNECT_KB_ID not set]", "passages": ""}
     from careconnect.agents.retrieval_agent import search_docs
-    all_passages = search_docs(request)
+    all_passages = sanitize_retrieved(search_docs(request))
     # Keep only the single top-ranked passage. Semantic search returns several
     # loosely-related chunks; extra ones (e.g. triage/dosage text) can trip the
     # guardrail even for a simple question. Verifying against the best-matching
@@ -130,7 +130,7 @@ def run_escalation(request, state):
     return escalate(
         reason="Medication/clinical decision requires clinician review.",
         category="clinical_question",
-        request_details={"patient_request": request},
+        request_details={"patient_request": mask_pii(request)},
     )
 
 
@@ -181,11 +181,7 @@ def combine_safe_results(results, safety, state):
 def verify_response(draft, evidence, state):
     state.step("Verification Agent")
     if not evidence.strip():
-        if os.path.exists("retrieved_passages.txt"):
-            with open("retrieved_passages.txt", "r", encoding="utf-8") as f:
-                evidence = f.read()
-        else:
-            return {"verification_status": "SKIPPED", "reason": "no evidence available"}
+        return {"verification_status": "SKIPPED", "reason": "no evidence available"}
     with open("retrieved_passages.txt", "w", encoding="utf-8") as f:
         f.write(evidence)
     try:
@@ -214,6 +210,8 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "draft_response": BUDGET_MESSAGE}
+    except Exception:  # fail closed, but tell the patient
+        return {**outcome, "draft_response": ESCALATION_NOTICE}
     if verification.get("verification_status") != "PASS":
         draft = ESCALATION_NOTICE  # withhold the draft
     return {**outcome, "draft_response": draft, "verification": verification}
