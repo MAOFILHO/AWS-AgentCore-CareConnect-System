@@ -117,6 +117,11 @@ class GoldenScenarioTest(unittest.TestCase):
                 self.assertEqual(out["decision"], scenario["decision"])
                 if "citations" in scenario:
                     self.assertEqual(out["citations"], scenario["citations"])
+                retrieved = {name for name, _ in kb.retrieve(scenario["request"])}
+                if "untrusted" in scenario:
+                    self.assertTrue(retrieved & set(scenario["untrusted"]))
+                for name in scenario.get("untrusted", []):
+                    self.assertNotIn(name, out["citations"])
                 for bad in scenario.get("reply_excludes", []):
                     self.assertNotIn(bad, out["reply"].lower())
                 self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
