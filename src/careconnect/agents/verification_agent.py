@@ -31,9 +31,7 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 import json
 import os
 import re
-import boto3
 from pydantic import BaseModel, Field
-from strands import Agent
 
 # ---------------------------------------------------------------------------
 # Configuration. UPDATE REGION if you did not build in us-east-1.
@@ -41,16 +39,21 @@ from strands import Agent
 REGION = "us-east-1"
 
 # UPDATE THESE by exporting the two environment variables before running.
-GUARDRAIL_ID = os.environ.get("CARECONNECT_GUARDRAIL_ID")
-GUARDRAIL_VERSION = os.environ.get("CARECONNECT_GUARDRAIL_VERSION")
+# They are read when a check runs, not when this file is imported.
+def get_guardrail_settings():
+    guardrail_id = os.environ.get("CARECONNECT_GUARDRAIL_ID")
+    guardrail_version = os.environ.get("CARECONNECT_GUARDRAIL_VERSION")
+    if not guardrail_id:
+        raise ValueError("CARECONNECT_GUARDRAIL_ID is not configured.")
+    if not guardrail_version:
+        raise ValueError("CARECONNECT_GUARDRAIL_VERSION is not configured.")
+    return guardrail_id, guardrail_version
 
-if not GUARDRAIL_ID:
-    raise ValueError("CARECONNECT_GUARDRAIL_ID is not configured.")
-if not GUARDRAIL_VERSION:
-    raise ValueError("CARECONNECT_GUARDRAIL_VERSION is not configured.")
 
-bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
-lambda_client = boto3.client("lambda", region_name=REGION)
+def aws_client(service):
+    import boto3
+
+    return boto3.client(service, region_name=REGION)
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +81,7 @@ class GroundingResult(BaseModel):
 # ---------------------------------------------------------------------------
 # The verifier model. It only verifies — it never answers or rewrites.
 # ---------------------------------------------------------------------------
-verification_agent = Agent(
-    system_prompt="""
+SYSTEM_PROMPT = """
 You are the CareConnect Verification Agent for Riverside Health.
 Your job is to verify a draft patient-support response against
 approved retrieved evidence.
@@ -95,7 +97,12 @@ Rules:
 7. Report unsupported claims clearly.
 8. Preserve a strict separation between evidence and draft content.
 """
-)
+
+
+def get_verification_agent():
+    from strands import Agent
+
+    return Agent(system_prompt=SYSTEM_PROMPT)
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +130,7 @@ def check_citations(answer, evidence):
 # ---------------------------------------------------------------------------
 def run_deterministic_safety(answer):
     payload = {"text": answer}
-    response = lambda_client.invoke(
+    response = aws_client("lambda").invoke(
         FunctionName="careconnect-deterministic-safety",
         InvocationType="RequestResponse",
         Payload=json.dumps(payload).encode("utf-8"),
@@ -136,9 +143,10 @@ def run_deterministic_safety(answer):
 # Check 3 — Guardrail: ask the Bedrock Guardrail whether the answer is allowed.
 # ---------------------------------------------------------------------------
 def run_guardrail(answer):
-    response = bedrock_runtime.apply_guardrail(
-        guardrailIdentifier=GUARDRAIL_ID,
-        guardrailVersion=GUARDRAIL_VERSION,
+    guardrail_id, guardrail_version = get_guardrail_settings()
+    response = aws_client("bedrock-runtime").apply_guardrail(
+        guardrailIdentifier=guardrail_id,
+        guardrailVersion=guardrail_version,
         source="OUTPUT",
         content=[{"text": {"text": answer}}],
         outputScope="FULL",
@@ -165,7 +173,7 @@ Determine whether every factual claim in the draft response
 is supported by the approved evidence.
 Do not use outside knowledge.
 """
-    result = verification_agent(prompt, structured_output_model=GroundingResult)
+    result = get_verification_agent()(prompt, structured_output_model=GroundingResult)
     return result.structured_output
 
 

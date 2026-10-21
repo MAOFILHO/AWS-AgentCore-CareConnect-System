@@ -21,8 +21,8 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 """
 
 import os
-import boto3
-from strands import Agent, tool
+
+from strands import tool
 
 # ---------------------------------------------------------------------------
 # AWS configuration
@@ -30,17 +30,24 @@ from strands import Agent, tool
 # UPDATE THIS if you built in a different AWS region.
 REGION = "us-east-1"
 
-# Read the Knowledge Base ID from an environment variable.
-# UPDATE THIS by exporting CARECONNECT_KB_ID before you run the script.
-KB_ID = os.environ.get("CARECONNECT_KB_ID")
-if not KB_ID:
-    raise ValueError(
-        "CARECONNECT_KB_ID is not set. "
-        "Please set your Knowledge Base ID before running the agent."
-    )
 
-# Create the Amazon Bedrock Knowledge Base runtime client.
-kb_client = boto3.client("bedrock-agent-runtime", region_name=REGION)
+# Read the Knowledge Base ID when the tool is called, not when this file is imported.
+# UPDATE THIS by exporting CARECONNECT_KB_ID before you run the script.
+def get_kb_id():
+    kb_id = os.environ.get("CARECONNECT_KB_ID")
+    if not kb_id:
+        raise ValueError(
+            "CARECONNECT_KB_ID is not set. "
+            "Please set your Knowledge Base ID before running the agent."
+        )
+    return kb_id
+
+
+# Create the Amazon Bedrock Knowledge Base runtime client on first use.
+def get_kb_client():
+    import boto3
+
+    return boto3.client("bedrock-agent-runtime", region_name=REGION)
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +64,9 @@ def search_docs(query: str) -> str:
     """
     # Call the Bedrock Knowledge Base "retrieve" operation. It takes the KB ID
     # and the query text, and returns the most relevant approved passages.
-    response = kb_client.retrieve(
-        knowledgeBaseId=KB_ID,
+    kb_id = get_kb_id()
+    response = get_kb_client().retrieve(
+        knowledgeBaseId=kb_id,
         retrievalQuery={"text": query},
         retrievalConfiguration={
             "vectorSearchConfiguration": {"numberOfResults": 5}
@@ -101,8 +109,7 @@ Relevance score:
 # ---------------------------------------------------------------------------
 # The agent itself: a model given the search_docs tool and strict safety rules.
 # ---------------------------------------------------------------------------
-retrieval_agent = Agent(
-    system_prompt="""
+SYSTEM_PROMPT = """
 You are the CareConnect Retrieval Agent for Riverside Health.
 Your only responsibility is to retrieve information from the
 approved Riverside Health Knowledge Base.
@@ -123,9 +130,13 @@ Follow these rules:
     information was found.
 
 Do not fill information gaps using outside knowledge.
-""",
-    tools=[search_docs],
-)
+"""
+
+
+def get_retrieval_agent():
+    from strands import Agent
+
+    return Agent(system_prompt=SYSTEM_PROMPT, tools=[search_docs])
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +156,7 @@ if __name__ == "__main__":
         if not question:
             continue
 
-        response = retrieval_agent(question)
+        response = get_retrieval_agent()(question)
         print("\nResponse:\n")
         print(response)
         print()

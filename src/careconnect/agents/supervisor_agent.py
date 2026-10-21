@@ -32,9 +32,10 @@ import os
 import re
 import time
 
-# These imports require the specialist files to be in the same directory.
-from escalation_agent import escalate
-from verification_agent import verify
+# Specialist agents live in the same package; run with PYTHONPATH=src.
+from careconnect.agents.escalation_agent import escalate
+from careconnect.agents.verification_agent import verify
+from careconnect.supervisor_model import load_supervisor_model
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ def run_retrieval(request, state):
     # >>> LEARNERS: export CARECONNECT_KB_ID="<your-kb-id>"
     if not os.environ.get("CARECONNECT_KB_ID"):
         return {"answer": "[retrieval skipped: CARECONNECT_KB_ID not set]", "passages": ""}
-    from retrieval_agent import search_docs
+    from careconnect.agents.retrieval_agent import search_docs
     all_passages = search_docs(request)
     # Keep only the single top-ranked passage. Semantic search returns several
     # loosely-related chunks; extra ones (e.g. triage/dosage text) can trip the
@@ -139,11 +140,11 @@ def run_task_tool(request, state):
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
         return "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]"
     try:
-        from task_tool_agent import mcp_client, SYSTEM_PROMPT
+        from careconnect.agents.task_tool_agent import SYSTEM_PROMPT, get_mcp_client
         from strands import Agent
-        with mcp_client:
+        with get_mcp_client() as mcp_client:
             tools = mcp_client.list_tools_sync()
-            agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools)
+            agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=load_supervisor_model())
             return str(agent(request))
     except Exception as exc:
         return f"[task/tool agent error - gateway call failed: {exc}]"
