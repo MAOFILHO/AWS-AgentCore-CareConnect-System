@@ -12,7 +12,8 @@ from careconnect.fakes import (
     FakeGuardrail,
     FakeKnowledgeBase,
 )
-from careconnect.supervisor import NO_ANSWER, supervisor_flow
+from careconnect.gateway import FakeGateway
+from careconnect.supervisor import ESCALATION_NOTICE, NO_ANSWER, supervisor_flow
 
 
 class SupervisorFlowTest(unittest.TestCase):
@@ -149,3 +150,39 @@ class BudgetTest(unittest.TestCase):
                 path.write_text(text)
                 with self.assertRaises(ValueError):
                     load_budgets(path)
+
+
+class TaskToolFlowTest(unittest.TestCase):
+    def flow(self, text, key=None):
+        self.tickets = FakeEscalationTicketStore()
+        return supervisor_flow(
+            text, FakeKnowledgeBase({}), self.tickets, FakeGrounding(), FakeGuardrail(),
+            approved=set(), cost_meter=FakeCostMeter(), gateway=FakeGateway(), idempotency_key=key,
+        )
+
+    def test_appointment_status_returns_synthetic_appointment(self):
+        out = self.flow("What is my appointment status?")
+        self.assertIn("APT-DEMO-1001", out["reply"])
+        self.assertIn("scheduled", out["reply"])
+
+    def test_refill_awaits_human_approval_and_is_not_submitted(self):
+        out = self.flow("Please refill my Metformin", key="key-1")
+        self.assertIn("awaits human approval", out["reply"])
+        self.assertIs(out["task"]["submitted"], False)
+        self.assertEqual(out["task"]["status"], "awaiting_approval")
+
+    def test_refill_without_idempotency_key_shows_escalation_notice(self):
+        out = self.flow("Please refill my Metformin")
+        self.assertEqual(out["reply"], ESCALATION_NOTICE)
+        self.assertEqual(out["decision"], "escalate")
+        self.assertEqual(len(self.tickets.tickets), 1)
+
+    def test_refill_without_a_drug_name_escalates_and_stages_nothing(self):
+        for text in ("Please refill for me", "refill of my <script>"):
+            out = self.flow(text, key="key-1")
+            self.assertEqual(out["decision"], "escalate", text)
+            self.assertNotIn("task", out, text)
+
+    def test_refill_process_question_is_not_a_refill(self):
+        out = self.flow("what is the refill process")
+        self.assertNotIn("task", out)
