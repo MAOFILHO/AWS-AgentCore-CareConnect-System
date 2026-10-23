@@ -170,6 +170,7 @@ class GoldenScenarioTest(unittest.TestCase):
                     cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
                     gateway=FakeGateway() if scenario.get("gateway") else None,
                     idempotency_key=scenario.get("idempotency_key"),
+                    patient_reference="PAT-1",
                 )
                 for good in scenario.get("reply_includes", []):
                     self.assertIn(good, out["reply"])

@@ -153,11 +153,12 @@ class BudgetTest(unittest.TestCase):
 
 
 class TaskToolFlowTest(unittest.TestCase):
-    def flow(self, text, key=None):
+    def flow(self, text, key=None, patient="PAT-1"):
         self.tickets = FakeEscalationTicketStore()
         return supervisor_flow(
             text, FakeKnowledgeBase({}), self.tickets, FakeGrounding(), FakeGuardrail(),
             approved=set(), cost_meter=FakeCostMeter(), gateway=FakeGateway(), idempotency_key=key,
+            patient_reference=patient,
         )
 
     def test_appointment_status_returns_synthetic_appointment(self):
@@ -185,4 +186,21 @@ class TaskToolFlowTest(unittest.TestCase):
 
     def test_refill_process_question_is_not_a_refill(self):
         out = self.flow("what is the refill process")
+        self.assertNotIn("task", out)
+
+    def test_reply_body_leaves_out_patient_reference(self):
+        for out in (self.flow("What is my appointment status?"),
+                    self.flow("Please refill my Metformin", key="key-1")):
+            self.assertNotIn("patient_reference", out["task"])
+            self.assertNotIn("PAT-1", str(out))
+
+    def test_task_without_patient_reference_escalates(self):
+        for text, key in (("What is my appointment status?", None), ("Please refill my Metformin", "key-1")):
+            out = self.flow(text, key=key, patient=None)
+            self.assertEqual(out["decision"], "escalate", text)
+            self.assertNotIn("task", out, text)
+
+    def test_whitespace_idempotency_key_escalates(self):
+        out = self.flow("Please refill my Metformin", key="   ")
+        self.assertEqual(out["decision"], "escalate")
         self.assertNotIn("task", out)
