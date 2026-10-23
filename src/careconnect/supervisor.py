@@ -79,11 +79,16 @@ def _flow(
 REFILL_REQUEST = re.compile(r"\brefill\s+(?:of|for|my)\s+(?:my\s+)?(\w+)", re.IGNORECASE)
 
 
+NOT_A_DRUG = {"me", "my", "us", "it", "them"}
+
+
 def _task_reply(request, gateway, idempotency_key, tracker):
     """Task/Tool agent seam: staged reply, "escalate" on a rejected refill, None if not a task."""
     refill = REFILL_REQUEST.search(request)
     if refill:
         tracker.step("task_tool")
+        if refill.group(1).lower() in NOT_A_DRUG:  # fail closed: no drug named, a human decides
+            return "escalate"
         try:
             staged = gateway.stage_refill_request(refill.group(1), idempotency_key)
         except ValueError:  # fail closed: a refill without a key is never staged

@@ -177,6 +177,12 @@ class TaskToolFlowTest(unittest.TestCase):
         self.assertEqual(out["decision"], "escalate")
         self.assertEqual(len(self.tickets.tickets), 1)
 
+    def test_refill_without_a_drug_name_escalates_and_stages_nothing(self):
+        for text in ("Please refill for me", "refill of my <script>"):
+            out = self.flow(text, key="key-1")
+            self.assertEqual(out["decision"], "escalate", text)
+            self.assertNotIn("task", out, text)
+
     def test_refill_process_question_is_not_a_refill(self):
         out = self.flow("what is the refill process")
         self.assertNotIn("task", out)
