@@ -238,3 +238,21 @@ class UncitedAnswerGoldenTest(unittest.TestCase):
         self.assertNotIn("citations", out)
         self.assertNotIn("11:00", out["draft_response"])
         escalate.assert_called_once()
+
+
+class MixedSourceGoldenTest(unittest.TestCase):
+    def test_untrusted_passage_is_dropped_from_the_draft(self):
+        for passages in (
+            "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/v.md\nSECRET untrusted text.\nSource:\ns3://docs/evaluation-untrusted/x.md",
+            "Passage 1\nSECRET untrusted text.\nSource:\ns3://docs/evaluation-untrusted/x.md\nPassage 2\nVisiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/v.md",
+        ):
+            retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+            with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                    mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                    mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
+                    mock.patch("builtins.open", mock.mock_open(read_data="")):
+                out = supervisor_agent.supervisor_flow("visiting hours", cost_meter=FakeCostMeter())
+            self.assertEqual(out["decision"], "allow")
+            self.assertIn("11:00", out["draft_response"])
+            self.assertNotIn("SECRET", out["draft_response"])
+            self.assertEqual(out["citations"], ["s3://docs/approved/v.md"])

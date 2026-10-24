@@ -107,8 +107,15 @@ def run_retrieval(request, state):
     # loosely-related chunks; extra ones (e.g. triage/dosage text) can trip the
     # guardrail even for a simple question. Verifying against the best-matching
     # passage keeps the draft grounded AND clear of unrelated safety triggers.
-    top = all_passages.split("Passage 2")[0].strip()
+    # Passages whose Source is not under approved/ are dropped before the draft.
+    top = next((p.strip() for p in split_passages(all_passages) if approved_sources(p)), "")
     return {"answer": top, "passages": top}
+
+
+def split_passages(text):
+    """One chunk per passage, each ending at its Source URI line."""
+    blocks = re.split(r"^Passage \d+\s*$", text, flags=re.MULTILINE)
+    return [c for b in blocks for c in re.findall(r"(?s).*?^Source:[ \t]*\n\S+", b, flags=re.MULTILINE)]
 
 
 def run_task_tool(request, state):
