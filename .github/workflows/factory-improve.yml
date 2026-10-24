@@ -17,6 +17,8 @@ jobs:
         env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
         run: |
           SINCE="$(date -u -d 'yesterday' +%F 2>/dev/null || date -u -v-1d +%F)"
+          # The "🤖 **Security Issue:" prefix is the comment format of anthropics/claude-code-security-review
+          # as pinned in factory-security.yml (0c6a49f1fa56a1d472575da86a94dbc1edb78eda); recheck it when that pin moves.
           gh pr list --limit 200 --state all --search "updated:>=$SINCE" --json number -q '.[].number' | while read -r n; do
             echo "## PR #$n"; gh api "repos/${{ github.repository }}/pulls/$n/comments" --paginate \
               --jq '.[] | select((.user.login == "github-actions[bot]" and (.body | startswith("🤖 **Security Issue:"))) | not) | "- [\(.user.login)] on \(.path):\(.line // "-"): \(.body | .[0:400])"'
