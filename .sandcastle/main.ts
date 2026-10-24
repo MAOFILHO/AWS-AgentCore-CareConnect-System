@@ -9,7 +9,7 @@
 //          each returning a typed verdict; the implementer fixes CHANGES
 //          up to 5 rounds, re-reviewing only the new diff
 //        branch is pushed and a PR opened (draft if a reviewer still objects)
-//   3. Merging is NOT done here. GitHub branch protection + a human do that.
+//   3. Merging is NOT done here. The factory-merge Action (allow-listed files only) or a human with merge.sh does that.
 //
 // Everything repo-specific lives in AGENTS.md and the prompt files beside this one.
 // Run:  factory run     (or: npx tsx .sandcastle/main.ts)
@@ -228,9 +228,14 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
 
     execFileSync("git", ["push", "-u", "origin", issue.branch, "--force-with-lease"], { stdio: "inherit" });
     // A rerun on an existing branch updates the open PR instead of failing on "already exists".
+    let updated = false;
     let prUrl = gh("pr", "list", "--head", issue.branch, "--state", "open", "--json", "url", "-q", ".[0].url");
     if (prUrl) {
       gh("pr", "edit", prUrl, "--body", body);
+      // Keep the draft state in step with this run's verdict: factory-merge refuses a draft.
+      if (passed) gh("pr", "ready", prUrl);
+      else gh("pr", "ready", "--undo", prUrl);
+      updated = true;
     } else {
       const prArgs = ["pr", "create", "--head", issue.branch, "--title", `${issue.title} (#${issue.id})`, "--body", body];
       if (!passed) prArgs.push("--draft");
@@ -246,7 +251,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       ].join("\n"));
     }
     if (securityBlock) gh("pr", "edit", prUrl, "--add-label", "needs-human");
-    log(tag, `${passed ? "PR" : "draft PR"} opened: ${prUrl}`);
+    log(tag, `${passed ? "PR" : "draft PR"} ${updated ? "updated" : "opened"}: ${prUrl}`);
     results.push({ id: issue.id, branch: issue.branch, pr: prUrl, state: passed ? "ready" : "draft" });
   } catch (err) {
     log(tag, `failed: ${(err as Error).message}`);
