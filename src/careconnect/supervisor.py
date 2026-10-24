@@ -1,5 +1,6 @@
 """Supervisor seam: request in, outcome out."""
 
+import logging
 import re
 import uuid
 
@@ -17,6 +18,19 @@ CLINICAL_REASON = "Medication/clinical decision requires clinician review."
 UNVERIFIED_REASON = "Answer could not be verified."
 TASK_REASON = "Task request could not be completed safely."
 
+log = logging.getLogger(__name__)
+
+
+def _log_outcome(request_id, decision, outcome):
+    """One record per request: IDs and labels only, never the message text."""
+    log.info("request_id=%s safety_gate=%s outcome=%s", request_id, decision, outcome)
+
+
+def _outcome_label(out):
+    if out["decision"] == "escalate":
+        return "escalation_failed" if out["reply"] == ESCALATION_FAILED_NOTICE else "escalation"
+    return {"allow": "answer", "block": "block", "stop": "stop"}[out["decision"]]
+
 
 def supervisor_flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
@@ -26,15 +40,20 @@ def supervisor_flow(
     tracker = BudgetTracker(budgets or load_budgets(), cost_meter, clock)
     request_id = str(uuid.uuid4())
     try:
-        return _flow(
+        out = _flow(
             request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
             approved, tracker, request_id, gateway, idempotency_key, patient_reference,
         )
     except BudgetExceeded:
-        return {
+        out = {
             "request_id": request_id, "citations": [], "escalation": None,
             "decision": "stop", "reply": BUDGET_MESSAGE,
         }
+    except Exception:  # no message text or error text in logs
+        _log_outcome(request_id, "unknown", "error")
+        raise
+    _log_outcome(request_id, out["decision"], _outcome_label(out))
+    return out
 
 
 def _flow(

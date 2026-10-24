@@ -156,6 +156,12 @@ GOLDEN_SCENARIOS = [
         "idempotency_key": "   ",
     },
     {
+        "name": "request text never appears in the log",
+        "request": "should I double my dose, my name is Zed Quillfeather",
+        "decision": "escalate",
+        "log_excludes": ["Quillfeather", "double my dose"],
+    },
+    {
         "name": "cost protection stops a request over the cost limit",
         "request": "visiting hours",
         "decision": "stop",
@@ -181,14 +187,20 @@ class GoldenScenarioTest(unittest.TestCase):
                     kb.documents[name] = (UNTRUSTED / name).read_text()
                 tickets = FakeEscalationTicketStore()
                 workflow = FakeApprovalWorkflow()
-                out = supervisor_flow(
-                    scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
-                    workflow=workflow, approved=set(documents),
-                    cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
-                    gateway=FakeGateway() if scenario.get("gateway") else None,
-                    idempotency_key=scenario.get("idempotency_key"),
-                    patient_reference=None if scenario.get("no_patient") else "PAT-1",
-                )
+                with self.assertLogs("careconnect.supervisor", level="INFO") as logs:
+                    out = supervisor_flow(
+                        scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
+                        workflow=workflow, approved=set(documents),
+                        cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
+                        gateway=FakeGateway() if scenario.get("gateway") else None,
+                        idempotency_key=scenario.get("idempotency_key"),
+                        patient_reference=None if scenario.get("no_patient") else "PAT-1",
+                    )
+                self.assertEqual(len(logs.output), 1)
+                self.assertIn(out["request_id"], logs.output[0])
+                self.assertNotIn(scenario["request"], logs.output[0])
+                for hidden in scenario.get("log_excludes", []):
+                    self.assertNotIn(hidden, logs.output[0])
                 for good in scenario.get("reply_includes", []):
                     self.assertIn(good, out["reply"])
                 for field, value in scenario.get("task", {}).items():
