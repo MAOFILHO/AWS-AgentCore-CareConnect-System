@@ -6,7 +6,7 @@ Riverside Health patient-support assistant (console/CLI build).
 WHAT THIS LAMBDA DOES
   It sits between the public API Gateway and the deployed Supervisor runtime.
   It receives a web request { "prompt": "..." }, calls the AgentCore runtime,
-  cleans the streamed response into a single answer, and returns it with the
+  reads the {decision, reply, citations} result, and returns it with the
   CORS headers a browser needs. Failures return a short fixed error message only.
 
 HOW TO DEPLOY (console)
@@ -18,6 +18,7 @@ HOW TO DEPLOY (console)
   5. Give the Lambda's execution role permission to call the runtime
      (bedrock-agentcore:InvokeAgentRuntime).
   6. Connect it to an API Gateway POST /careconnect route.
+  7. Add pydantic (v2) to the function through a layer or the deploy package.
 
 >>> THINGS YOU MUST UPDATE ARE MARKED "CHANGE #" BELOW <<<
 """
@@ -38,6 +39,18 @@ ALLOWED_ORIGIN = "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN"
 
 import json
 import re
+
+from pydantic import BaseModel, ConfigDict, StrictStr
+from typing import Literal
+
+
+# Same contract as careconnect.api_reply.ApiReply (this Lambda deploys alone).
+class ApiReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["allow", "escalate", "block", "stop"]
+    reply: StrictStr
+    citations: list[StrictStr]
 
 
 # Build the CORS headers. The allow-origin header is added only when the
@@ -130,6 +143,9 @@ def lambda_handler(event, context):
     except Exception:
         return _reply(event, 500, {"error": "Request failed."})
 
-    # Turn the streamed response into a clean single answer and return it.
-    answer = _clean(_extract_text_from_sse(raw)) or _clean(raw)
-    return _reply(event, 200, {"answer": answer})
+    # The runtime returns {decision, reply, citations}. Any other shape is the fixed error.
+    try:
+        result = ApiReply.model_validate_json(_clean(_extract_text_from_sse(raw)) or _clean(raw))
+    except Exception:
+        return _reply(event, 500, {"error": "Request failed."})
+    return _reply(event, 200, result.model_dump())

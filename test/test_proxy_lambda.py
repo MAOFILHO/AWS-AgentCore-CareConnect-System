@@ -28,6 +28,22 @@ class FailingClient:
         raise RuntimeError("secret arn:aws:... detail")
 
 
+class Stream:
+    def __init__(self, text):
+        self.text = text
+
+    def read(self):
+        return self.text.encode()
+
+
+class ReplyClient:
+    def __init__(self, text):
+        self.text = text
+
+    def invoke_agent_runtime(self, **_):
+        return {"response": Stream(self.text)}
+
+
 class ProxyLambdaTest(unittest.TestCase):
     def setUp(self):
         patcher = mock.patch.object(proxy, "ALLOWED_ORIGIN", SITE)
@@ -57,6 +73,35 @@ class ProxyLambdaTest(unittest.TestCase):
             out = proxy.lambda_handler(event(), None)
         self.assertEqual(out["statusCode"], 500)
         self.assertEqual(json.loads(out["body"]), {"error": "Request failed."})
+
+    def run_proxy(self, payload):
+        text = payload if isinstance(payload, str) else json.dumps(payload)
+        with mock.patch.object(proxy, "_client", return_value=ReplyClient(text)):
+            return proxy.lambda_handler(event(prompt="secret question"), None)
+
+    def test_passes_through_each_decision(self):
+        for decision, cites in [("allow", ["s3://d/a.md"]), ("escalate", []), ("block", []), ("stop", [])]:
+            with self.subTest(decision):
+                sent = {"decision": decision, "reply": "ok", "citations": cites}
+                out = self.run_proxy(sent)
+                self.assertEqual(out["statusCode"], 200)
+                self.assertEqual(json.loads(out["body"]), sent)
+
+    def test_other_shapes_return_fixed_error(self):
+        bad = [
+            "plain text",
+            {"answer": "x"},
+            {"decision": "allow", "reply": "ok"},
+            {"decision": "maybe", "reply": "ok", "citations": []},
+            {"decision": "allow", "reply": "ok", "citations": [1]},
+            {"decision": "allow", "reply": "ok", "citations": [], "request": "secret question"},
+        ]
+        for payload in bad:
+            with self.subTest(payload):
+                out = self.run_proxy(payload)
+                self.assertEqual(out["statusCode"], 500)
+                self.assertEqual(json.loads(out["body"]), {"error": "Request failed."})
+                self.assertNotIn("secret question", out["body"])
 
     def test_bad_body_has_no_detail(self):
         out = proxy.lambda_handler({"headers": {"Origin": SITE}, "body": "{"}, None)
