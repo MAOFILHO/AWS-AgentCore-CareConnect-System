@@ -212,7 +212,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       }
     }
 
-    // Push + PR. The agent never merges. Branch protection + a human do.
+    // Push + PR. The agent never merges. The factory-merge Action or a human with .sandcastle/merge.sh merges.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const passed = codeV.verdict === "PASS" && secV.verdict === "PASS";
