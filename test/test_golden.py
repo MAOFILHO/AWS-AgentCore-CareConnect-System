@@ -1,6 +1,9 @@
 import unittest
 from pathlib import Path
 
+from unittest import mock
+
+from careconnect.agents import supervisor_agent
 from careconnect.fakes import (
     FakeApprovalWorkflow,
     FakeCostMeter,
@@ -219,3 +222,19 @@ class GoldenScenarioTest(unittest.TestCase):
                 self.assertEqual(len(workflow.started), len(tickets.tickets))
                 if "reason" in scenario:
                     self.assertEqual(tickets.tickets[0]["reason"], scenario["reason"])
+
+
+class UncitedAnswerGoldenTest(unittest.TestCase):
+    def test_allowed_answer_with_no_approved_citation_escalates(self):
+        passages = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/evaluation-untrusted/note.md"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.object(supervisor_agent, "escalate", return_value={}) as escalate, \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
+                mock.patch("builtins.open", mock.mock_open(read_data="")):
+            out = supervisor_agent.supervisor_flow("visiting hours", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "escalate")
+        self.assertNotIn("citations", out)
+        self.assertNotIn("11:00", out["draft_response"])
+        escalate.assert_called_once()

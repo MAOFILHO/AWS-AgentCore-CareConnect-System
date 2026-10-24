@@ -236,11 +236,12 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
                   "escalate" if clinical else "allow", result)
         notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
         return {**outcome, "decision": "escalate", "draft_response": notice}
-    if verification.get("verification_status") != "PASS":
+    citations = approved_sources(evidence)
+    if verification.get("verification_status") != "PASS" or (evidence.strip() and not citations):
         return {**outcome, "decision": "escalate", "draft_response": escalation_notice(request),
                 "verification": verification}  # withhold the draft
     return {**outcome, "decision": "allow", "draft_response": draft, "verification": verification,
-            "citations": approved_sources(evidence)}
+            "citations": citations}
 
 
 def approved_sources(evidence):
