@@ -14,9 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { fetch-depth: 2 }
-      - uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda  # main as of 2026-10-20
+      - id: scan
+        uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda  # main as of 2026-10-20
         with:
           comment-pr: true
           upload-results: true
           claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           custom-security-scan-instructions: .sandcastle/security-prompt.md
+      # The action only warns on findings and reports 0 when the scan errors, so the check would stay green.
+      # factory-merge relies on this check meaning "no blocker": fail on a HIGH finding, an error or no result.
+      - name: Fail on a high-severity finding or a missing result
+        run: |
+          f="$GITHUB_WORKSPACE/claudecode-results.json"
+          [ -s "$f" ] || { echo "no scan result: failing closed"; exit 1; }
+          if jq -e '.error' "$f" >/dev/null; then echo "scan error: failing closed"; exit 1; fi
+          high="$(jq '[(.findings // [])[] | select((.severity // "" | ascii_upcase) == "HIGH")] | length' "$f")"
+          [ "$high" = "0" ] || { echo "$high high-severity finding(s)"; exit 1; }
