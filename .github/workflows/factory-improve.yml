@@ -19,9 +19,9 @@ jobs:
           SINCE="$(date -u -d 'yesterday' +%F 2>/dev/null || date -u -v-1d +%F)"
           gh pr list --limit 200 --state all --search "updated:>=$SINCE" --json number -q '.[].number' | while read -r n; do
             echo "## PR #$n"; gh api "repos/${{ github.repository }}/pulls/$n/comments" --paginate \
-              --jq '.[] | select(.body | test("factory-review|security review|Security Issue:"; "i") | not) | "- [\(.user.login)] on \(.path):\(.line // "-"): \(.body | .[0:400])"'
+              --jq '.[] | select((.user.login == "github-actions[bot]" and (.body | startswith("🤖 **Security Issue:"))) | not) | "- [\(.user.login)] on \(.path):\(.line // "-"): \(.body | .[0:400])"'
             gh api "repos/${{ github.repository }}/issues/$n/comments" --paginate \
-              --jq '.[] | select(.body | test("<!-- factory-review -->") | not) | "- [\(.user.login)]: \(.body | .[0:400])"'
+              --jq '.[] | select((.user.login == "github-actions[bot]" and (.body | contains("<!-- factory-review -->"))) | not) | "- [\(.user.login)]: \(.body | .[0:400])"'
           done > /tmp/threads.md || true
           # What the reviewers caught in failed rounds (untrusted, 400 characters each).
           {
