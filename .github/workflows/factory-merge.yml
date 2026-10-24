@@ -33,13 +33,13 @@ jobs:
           set -euo pipefail
           pr="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number // empty')"
           [ -n "$pr" ] || { echo "no open PR for $BRANCH"; exit 0; }
-          info="$(gh pr view "$pr" --json headRefName,headRefOid,isDraft,labels)"
+          info="$(gh pr view "$pr" --json headRefName,headRefOid,isCrossRepository,isDraft,labels)"
           files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/files" --jq '.[].filename' | jq -R . | jq -s .)"
           checks="$(gh pr checks "$pr" --json name,bucket 2>/dev/null || true)"
           [ -n "$checks" ] || checks='[]'
           decision="$(jq -n --argjson info "$info" --argjson files "$files" --argjson checks "$checks" \
             --arg enabled "$ENABLED" \
-            '{enabled: ($enabled == "true"), branch: $info.headRefName, draft: $info.isDraft,
+            '{enabled: ($enabled == "true"), branch: $info.headRefName, crossRepository: $info.isCrossRepository, draft: $info.isDraft,
               labels: [$info.labels[].name], checks: $checks, files: $files}' | node .sandcastle/auto-merge-cli.js)"
           echo "$decision"
           reason="$(jq -r .reason <<<"$decision")"

@@ -5,7 +5,7 @@ import { decide } from "../.sandcastle/auto-merge.js";
 const REQUIRED = ["tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review"];
 const green = REQUIRED.map((name) => ({ name, bucket: "pass" }));
 const ok = {
-  enabled: true, branch: "sandcastle/issue-7", draft: false, labels: [],
+  enabled: true, crossRepository: false, branch: "sandcastle/issue-7", draft: false, labels: [],
   checks: green, files: ["src/frontend/chat.js", "test/chat.test.js"],
 };
 
@@ -44,8 +44,14 @@ test("it never merges a PR that touches safety, workflow, dependency or approved
     "Docs/adr/0001-factory-aws-access-capped-account.md", "infra/factory-account.yaml",
     "Docs/Repo/careconnect-approved-docs/approved/visiting-hours-and-policy.md",
     "Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py",
+    ".semgrep.yml", "eslint.config.js", "tsconfig.json", "CLAUDE.md",
+    "test/test_untrusted_documents.py", "src/careconnect/model.json",
   ];
   for (const file of protectedFiles) {
     refused({ files: ["src/frontend/chat.js", file] }, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+});
+
+test("it never merges a PR from a fork, even with a factory branch name", () => {
+  refused({ crossRepository: true }, /fork/);
 });

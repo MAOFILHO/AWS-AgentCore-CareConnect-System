@@ -13,12 +13,16 @@ export const PROTECTED = [
   ".github/", ".sandcastle/", "infra/", "Docs/adr/", "Docs/Repo/lambda-functions/",
   "Docs/Repo/careconnect-approved-docs/", "AGENTS.md", "REVIEW.md",
   "package.json", "package-lock.json", "requirements.txt",
+  // Configs of the checks themselves: a PR must not weaken the gate it is judged by.
+  ".semgrep.yml", "eslint.config.js", "tsconfig.json", "CLAUDE.md",
+  "test/test_untrusted_documents.py", "src/careconnect/model.json",
 ];
 
 const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.startsWith(p) : file === p));
 
-export function decide({ enabled, branch, draft, labels, checks, files }) {
+export function decide({ enabled, crossRepository, branch, draft, labels, checks, files }) {
   if (!enabled) return { merge: false, reason: "auto-merge is switched off" };
+  if (crossRepository) return { merge: false, reason: "PR comes from a fork" };
   if (!branch.startsWith("sandcastle/")) return { merge: false, reason: "not a factory branch" };
   if (draft) return { merge: false, reason: "PR is a draft" };
   for (const label of ["needs-human", "protected-paths"]) {
