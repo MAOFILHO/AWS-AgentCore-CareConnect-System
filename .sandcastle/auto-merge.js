@@ -10,14 +10,15 @@ export const PROTECTED = [
   "src/careconnect/supervisor_model.py", "src/careconnect/verification.py", "src/careconnect/gateway.py",
   "src/careconnect/budget.py", "src/careconnect/config.json", "src/careconnect/document_processing.py",
   "src/careconnect/ingest.py", "test/test_golden.py", "test/test_safety_gate.py",
-  ".github/", ".sandcastle/", "infra/", "Docs/adr/", "Docs/Repo/lambda-functions/",
+  ".github/", ".sandcastle/", ".claude/", "infra/", "Docs/adr/", "Docs/Repo/lambda-functions/",
   "Docs/Repo/careconnect-approved-docs/", "AGENTS.md", "REVIEW.md",
   "package.json", "package-lock.json", "requirements.txt",
   // Configs of the checks themselves: a PR must not weaken the gate it is judged by.
   ".semgrep.yml", "eslint.config.js", "tsconfig.json", "CLAUDE.md",
   "test/test_untrusted_documents.py", "src/careconnect/model.json", "src/careconnect/fakes.py",
   "test/test_logging.py", "test/test_verification.py", "test/test_supervisor.py", "test/test_gateway.py",
-  "test/test_supervisor_agent.py", "test/test_proxy_lambda.py", "test/auto-merge.test.js",
+  "test/test_supervisor_agent.py", "test/test_proxy_lambda.py", "test/test_agents_import.py",
+  "test/auto-merge.test.js",
 ];
 
 const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.startsWith(p) : file === p));

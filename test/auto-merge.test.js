@@ -48,6 +48,7 @@ test("it never merges a PR that touches safety, workflow, dependency or approved
     "test/test_untrusted_documents.py", "src/careconnect/model.json", "src/careconnect/fakes.py",
     "test/test_logging.py", "test/test_verification.py", "test/test_supervisor.py", "test/test_gateway.py",
     "test/test_supervisor_agent.py", "test/test_proxy_lambda.py", "test/auto-merge.test.js",
+    "test/test_agents_import.py", ".claude/skills/code-review/SKILL.md", ".claude/settings.json",
   ];
   for (const file of protectedFiles) {
     refused({ files: ["src/frontend/chat.js", file] }, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
