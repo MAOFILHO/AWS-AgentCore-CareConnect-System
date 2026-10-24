@@ -1,5 +1,6 @@
 """Supervisor seam: request in, outcome out."""
 
+import re
 import uuid
 
 from careconnect.budget import BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, load_budgets
@@ -14,18 +15,20 @@ ESCALATION_FAILED_NOTICE = (
 )
 CLINICAL_REASON = "Medication/clinical decision requires clinician review."
 UNVERIFIED_REASON = "Answer could not be verified."
+TASK_REASON = "Task request could not be completed safely."
 
 
 def supervisor_flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
-    *, workflow, approved, cost_meter, budgets=None, clock=None,
+    *, workflow, approved, cost_meter, budgets=None, clock=None, gateway=None, idempotency_key=None,
+    patient_reference=None,
 ):
     tracker = BudgetTracker(budgets or load_budgets(), cost_meter, clock)
     request_id = str(uuid.uuid4())
     try:
         return _flow(
             request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
-            approved, tracker, request_id,
+            approved, tracker, request_id, gateway, idempotency_key, patient_reference,
         )
     except BudgetExceeded:
         return {
@@ -36,7 +39,7 @@ def supervisor_flow(
 
 def _flow(
     request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
-    approved, tracker, request_id,
+    approved, tracker, request_id, gateway=None, idempotency_key=None, patient_reference=None,
 ):
     gate = classify(request)
     outcome = {"request_id": request_id, "citations": [], "escalation": None}
@@ -57,6 +60,12 @@ def _flow(
         return escalate(CLINICAL_REASON, "clinical_question")
     if gate["injection"]:
         return {**outcome, "decision": "block", "reply": "I can't help with that request."}
+    if gateway:
+        task = _task_reply(request, gateway, idempotency_key, patient_reference, tracker)
+        if task == "escalate":
+            return escalate(TASK_REASON, "task_request")
+        if task:
+            return {**outcome, "decision": "allow", **task}
     tracker.step("retrieve")
     hits = [(name, sanitize_retrieved(text)) for name, text in knowledge_base.retrieve(request)]
     hits = [(name, text) for name, text in hits if text and name in (approved or ())]
@@ -74,3 +83,40 @@ def _flow(
     if result.status != "PASS":
         return escalate(UNVERIFIED_REASON, "unverified_answer")
     return {**outcome, "decision": "allow", "reply": draft, "citations": citations}
+
+
+REFILL_REQUEST = re.compile(r"\brefill\s+(?:of|for|my)\s+(?:my\s+)?(\w+)", re.IGNORECASE)
+
+
+NOT_A_DRUG = {"me", "my", "us", "it", "them"}
+
+
+def _task_reply(request, gateway, idempotency_key, patient_reference, tracker):
+    """Task/Tool agent seam: staged reply, "escalate" on a rejected refill, None if not a task."""
+    refill = REFILL_REQUEST.search(request)
+    if refill:
+        tracker.step("task_tool")
+        if not patient_reference:  # fail closed: no authenticated patient, a human decides
+            return "escalate"
+        if refill.group(1).lower() in NOT_A_DRUG:  # fail closed: no drug named, a human decides
+            return "escalate"
+        try:
+            staged = gateway.stage_refill_request(patient_reference, refill.group(1), idempotency_key)
+        except ValueError:  # fail closed: a refill without a key is never staged
+            return "escalate"
+        return {
+            "reply": f"Your {staged.drug} refill is staged and awaits human approval. "
+            "It has not been submitted.",
+            "task": staged.model_dump(exclude={"patient_reference"}),
+        }
+    if re.search(r"\bappointment status\b", request, re.IGNORECASE):
+        tracker.step("task_tool")
+        if not patient_reference:  # fail closed: no authenticated patient, a human decides
+            return "escalate"
+        status = gateway.check_appointment_status(patient_reference)
+        return {
+            "reply": f"Your {status.department} appointment {status.appointment_reference} "
+            f"is {status.appointment_status}.",
+            "task": status.model_dump(exclude={"patient_reference"}),
+        }
+    return None

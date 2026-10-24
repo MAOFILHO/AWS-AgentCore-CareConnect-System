@@ -9,6 +9,7 @@ from careconnect.fakes import (
     FakeGuardrail,
     FakeKnowledgeBase,
 )
+from careconnect.gateway import FakeGateway
 from careconnect.supervisor import supervisor_flow
 
 UNTRUSTED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/evaluation-untrusted"
@@ -132,6 +133,29 @@ GOLDEN_SCENARIOS = [
         "decision": "escalate",
     },
     {
+        "name": "staged refill awaits human approval and is never submitted",
+        "request": "Please refill my Metformin",
+        "decision": "allow",
+        "gateway": True,
+        "idempotency_key": "key-1",
+        "reply_includes": ["awaits human approval"],
+        "task": {"status": "awaiting_approval", "submitted": False},
+    },
+    {
+        "name": "appointment status without an authenticated patient escalates",
+        "request": "What is my appointment status?",
+        "decision": "escalate",
+        "gateway": True,
+        "no_patient": True,
+    },
+    {
+        "name": "refill with a whitespace-only idempotency key escalates",
+        "request": "Please refill my Metformin",
+        "decision": "escalate",
+        "gateway": True,
+        "idempotency_key": "   ",
+    },
+    {
         "name": "cost protection stops a request over the cost limit",
         "request": "visiting hours",
         "decision": "stop",
@@ -161,7 +185,14 @@ class GoldenScenarioTest(unittest.TestCase):
                     scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
                     workflow=workflow, approved=set(documents),
                     cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
+                    gateway=FakeGateway() if scenario.get("gateway") else None,
+                    idempotency_key=scenario.get("idempotency_key"),
+                    patient_reference=None if scenario.get("no_patient") else "PAT-1",
                 )
+                for good in scenario.get("reply_includes", []):
+                    self.assertIn(good, out["reply"])
+                for field, value in scenario.get("task", {}).items():
+                    self.assertEqual(out["task"][field], value)
                 self.assertEqual(out["decision"], scenario["decision"])
                 if "citations" in scenario:
                     self.assertEqual(out["citations"], scenario["citations"])

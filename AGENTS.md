@@ -57,6 +57,7 @@ This repo is built partly by a software factory (Sandcastle + GitHub Actions).
 - Issues labelled `factory` are picked up by `factory run`. Each gets one container, one branch `sandcastle/issue-<n>`, one PR.
 - A code reviewer and a security reviewer run on every branch and every PR. A security `blocker` stops the merge.
 - Agents never merge. This repo is on GitHub Free, so branch protection is not enforced. A human confirms every check is green and approves before merging.
+- A human merges a factory PR with `bash .sandcastle/merge.sh <pr>`. It refuses a draft, a `needs-human` PR and any check that is not green.
 - `REVIEW.md` holds reviewer conventions; the daily `factory-improve` workflow proposes edits to it through a PR.
 - Write issues with 2–5 checkable acceptance criteria; one issue = one PR under ~400 changed lines.
 - Agent rules: never build on `main`; one worktree and branch per task; never force-push except `--force-with-lease` on your own branch; never read `.env` or dump the environment.

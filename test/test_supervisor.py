@@ -13,7 +13,8 @@ from careconnect.fakes import (
     FakeGuardrail,
     FakeKnowledgeBase,
 )
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, NO_ANSWER, supervisor_flow
+from careconnect.gateway import FakeGateway
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, NO_ANSWER, supervisor_flow
 
 
 class SupervisorFlowTest(unittest.TestCase):
@@ -169,3 +170,58 @@ class BudgetTest(unittest.TestCase):
                 path.write_text(text)
                 with self.assertRaises(ValueError):
                     load_budgets(path)
+
+
+class TaskToolFlowTest(unittest.TestCase):
+    def flow(self, text, key=None, patient="PAT-1"):
+        self.tickets = FakeEscalationTicketStore()
+        return supervisor_flow(
+            text, FakeKnowledgeBase({}), self.tickets, FakeGrounding(), FakeGuardrail(),
+            workflow=FakeApprovalWorkflow(), approved=set(), cost_meter=FakeCostMeter(),
+            gateway=FakeGateway(), idempotency_key=key, patient_reference=patient,
+        )
+
+    def test_appointment_status_returns_synthetic_appointment(self):
+        out = self.flow("What is my appointment status?")
+        self.assertIn("APT-DEMO-1001", out["reply"])
+        self.assertIn("scheduled", out["reply"])
+
+    def test_refill_awaits_human_approval_and_is_not_submitted(self):
+        out = self.flow("Please refill my Metformin", key="key-1")
+        self.assertIn("awaits human approval", out["reply"])
+        self.assertIs(out["task"]["submitted"], False)
+        self.assertEqual(out["task"]["status"], "awaiting_approval")
+
+    def test_refill_without_idempotency_key_shows_escalation_notice(self):
+        out = self.flow("Please refill my Metformin")
+        self.assertEqual(out["reply"], ESCALATION_NOTICE)
+        self.assertEqual(out["decision"], "escalate")
+        self.assertEqual(len(self.tickets.tickets), 1)
+
+    def test_refill_without_a_drug_name_escalates_and_stages_nothing(self):
+        for text in ("Please refill for me", "refill of my <script>"):
+            out = self.flow(text, key="key-1")
+            self.assertEqual(out["decision"], "escalate", text)
+            self.assertNotIn("task", out, text)
+
+    def test_refill_process_question_is_not_a_refill(self):
+        out = self.flow("what is the refill process")
+        self.assertNotIn("task", out)
+
+    def test_reply_body_leaves_out_patient_reference(self):
+        for out in (self.flow("What is my appointment status?"),
+                    self.flow("Please refill my Metformin", key="key-1")):
+            self.assertNotIn("patient_reference", out["task"])
+            self.assertNotIn("PAT-1", str(out))
+
+    def test_task_without_patient_reference_escalates(self):
+        for text, key in (("What is my appointment status?", None), ("Please refill my Metformin", "key-1")):
+            out = self.flow(text, key=key, patient=None)
+            self.assertEqual(out["decision"], "escalate", text)
+            self.assertNotIn("task", out, text)
+            self.assertEqual(out["escalation"]["category"], "task_request", text)
+
+    def test_whitespace_idempotency_key_escalates(self):
+        out = self.flow("Please refill my Metformin", key="   ")
+        self.assertEqual(out["decision"], "escalate")
+        self.assertNotIn("task", out)
