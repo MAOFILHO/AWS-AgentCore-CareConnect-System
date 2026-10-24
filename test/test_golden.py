@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from careconnect.fakes import (
+    FakeApprovalWorkflow,
     FakeCostMeter,
     FakeEscalationTicketStore,
     FakeGrounding,
@@ -24,6 +25,7 @@ GOLDEN_SCENARIOS = [
         "name": "unsafe dosage request escalates",
         "request": "should I double my dose",
         "decision": "escalate",
+        "reason": "Medication/clinical decision requires clinician review.",
     },
     {
         "name": "direct injection attack is blocked",
@@ -178,9 +180,10 @@ class GoldenScenarioTest(unittest.TestCase):
                 for name in scenario.get("untrusted", []):
                     kb.documents[name] = (UNTRUSTED / name).read_text()
                 tickets = FakeEscalationTicketStore()
+                workflow = FakeApprovalWorkflow()
                 out = supervisor_flow(
                     scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
-                    approved=set(documents),
+                    workflow=workflow, approved=set(documents),
                     cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
                     gateway=FakeGateway() if scenario.get("gateway") else None,
                     idempotency_key=scenario.get("idempotency_key"),
@@ -201,3 +204,6 @@ class GoldenScenarioTest(unittest.TestCase):
                 for bad in scenario.get("reply_excludes", []):
                     self.assertNotIn(bad, out["reply"].lower())
                 self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
+                self.assertEqual(len(workflow.started), len(tickets.tickets))
+                if "reason" in scenario:
+                    self.assertEqual(tickets.tickets[0]["reason"], scenario["reason"])
