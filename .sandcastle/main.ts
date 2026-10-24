@@ -5,11 +5,11 @@
 //      run now, assigns a branch to each.
 //   2. For each issue, in parallel (max 3): one sandbox, one branch.
 //        implementer (Sonnet) builds test-first and commits
-//        code reviewer + security reviewer run IN PARALLEL on the same branch,
+//        code reviewer (Opus) + security reviewer (Opus) run IN PARALLEL on the same branch,
 //          each returning a typed verdict; the implementer fixes CHANGES
-//          up to 3 rounds, re-reviewing only the new diff
+//          up to 5 rounds, re-reviewing only the new diff
 //        branch is pushed and a PR opened (draft if a reviewer still objects)
-//   3. Merging is NOT done here. GitHub branch protection + a human do that.
+//   3. Merging is NOT done here. The factory-merge Action (allow-listed files only) or a human with merge.sh does that.
 //
 // Everything repo-specific lives in AGENTS.md and the prompt files beside this one.
 // Run:  factory run     (or: npx tsx .sandcastle/main.ts)
@@ -25,11 +25,11 @@ import { z } from "zod";
 const MODELS = {
   planner: process.env.FACTORY_PLANNER_MODEL ?? "claude-opus-5-5",
   builder: process.env.FACTORY_BUILDER_MODEL ?? "claude-sonnet-5-5",
-  reviewer: process.env.FACTORY_REVIEWER_MODEL ?? "claude-sonnet-5-5",
+  reviewer: process.env.FACTORY_REVIEWER_MODEL ?? "claude-opus-5-5",
   security: process.env.FACTORY_SECURITY_MODEL ?? "claude-opus-5-5",
 };
 const MAX_PARALLEL = Number(process.env.FACTORY_MAX_PARALLEL ?? 3);
-const MAX_REVIEW_ROUNDS = Number(process.env.FACTORY_MAX_REVIEW_ROUNDS ?? 3);
+const MAX_REVIEW_ROUNDS = Number(process.env.FACTORY_MAX_REVIEW_ROUNDS ?? 5);
 const MAX_BUILD_ITERATIONS = 40; // implementer loop cap per issue
 const REPO = "MAOFILHO/AWS-AgentCore-CareConnect-System";
 
@@ -132,13 +132,17 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
   const sandbox = await sandcastle.createSandbox({ branch: issue.branch, sandbox: docker(), hooks, copyToWorktree });
   try {
     // Build
+    // Findings from an earlier failed run, read only from a comment by the factory's own account.
+    const me = gh("api", "user", "-q", ".login");
+    const prior = gh("issue", "view", issue.id, "--json", "comments", "-q",
+      `[.comments[] | select(.author.login == "${me}" and (.body | startswith("Factory: review round")))] | last | .body // ""`);
     log(tag, "implementer starting");
     const build = await sandbox.run({
       name: `implement-${issue.id}`,
       maxIterations: MAX_BUILD_ITERATIONS,
       agent: sandcastle.claudeCode(MODELS.builder),
       promptFile: "./.sandcastle/implement-prompt.md",
-      promptArgs: { TASK_ID: issue.id, ISSUE_TITLE: issue.title, BRANCH: issue.branch },
+      promptArgs: { TASK_ID: issue.id, ISSUE_TITLE: issue.title, BRANCH: issue.branch, PRIOR_FINDINGS: prior },
     });
     if (build.commits.length === 0) {
       log(tag, "no commits produced; labelling needs-human");
@@ -227,11 +231,32 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     ].join("\n");
 
     execFileSync("git", ["push", "-u", "origin", issue.branch, "--force-with-lease"], { stdio: "inherit" });
-    const prArgs = ["pr", "create", "--head", issue.branch, "--title", `${issue.title} (#${issue.id})`, "--body", body];
-    if (!passed) prArgs.push("--draft");
-    const prUrl = gh(...prArgs);
+    // A rerun on an existing branch updates the open PR instead of failing on "already exists".
+    let updated = false;
+    let prUrl = gh("pr", "list", "--head", issue.branch, "--state", "open", "--json", "url", "-q", ".[0].url // empty");
+    if (prUrl) {
+      gh("pr", "edit", prUrl, "--body", body);
+      // Keep the draft state in step with this run's verdict: factory-merge refuses a draft.
+      if (passed) gh("pr", "ready", prUrl);
+      else gh("pr", "ready", "--undo", prUrl);
+      if (passed && !securityBlock) gh("pr", "edit", prUrl, "--remove-label", "needs-human");
+      updated = true;
+    } else {
+      const prArgs = ["pr", "create", "--head", issue.branch, "--title", `${issue.title} (#${issue.id})`, "--body", body];
+      if (!passed) prArgs.push("--draft");
+      prUrl = gh(...prArgs);
+    }
+    // Learn from a failed run: the next implementer reads the issue comments, so the open findings travel with the issue.
+    if (!passed) {
+      gh("issue", "comment", issue.id, "--body", [
+        `Factory: review round ${round} left findings open on ${issue.branch}. The next run must fix these first, on the same branch.`,
+        "",
+        renderFindings("Code review", codeV),
+        renderFindings("Security review", secV),
+      ].join("\n"));
+    }
     if (securityBlock) gh("pr", "edit", prUrl, "--add-label", "needs-human");
-    log(tag, `${passed ? "PR" : "draft PR"} opened: ${prUrl}`);
+    log(tag, `${passed ? "PR" : "draft PR"} ${updated ? "updated" : "opened"}: ${prUrl}`);
     results.push({ id: issue.id, branch: issue.branch, pr: prUrl, state: passed ? "ready" : "draft" });
   } catch (err) {
     log(tag, `failed: ${(err as Error).message}`);
