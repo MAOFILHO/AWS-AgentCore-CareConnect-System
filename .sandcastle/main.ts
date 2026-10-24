@@ -104,9 +104,10 @@ async function withLimit<T>(limit: number, items: readonly T[], fn: (t: T) => Pr
 // Phase 1: Plan
 // ---------------------------------------------------------------------------
 log("planner", `reading issues labelled 'factory' in ${REPO}`);
+// No install hook here: with no branch the planner mounts the host repo, and `npm ci` in the container
+// would replace the host node_modules with Linux binaries.
 const plan = await sandcastle.run({
   name: "planner",
-  hooks,
   sandbox: docker(),
   maxIterations: 1,
   agent: sandcastle.claudeCode(MODELS.planner),
