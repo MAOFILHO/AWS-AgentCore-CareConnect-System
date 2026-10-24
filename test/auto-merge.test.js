@@ -5,7 +5,7 @@ import { decide } from "../.sandcastle/auto-merge.js";
 const REQUIRED = ["tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review"];
 const green = REQUIRED.map((name) => ({ name, bucket: "pass" }));
 const ok = {
-  enabled: true, crossRepository: false, branch: "sandcastle/issue-7", draft: false, labels: [],
+  enabled: true, crossRepository: false, changedFiles: 2, branch: "sandcastle/issue-7", draft: false, labels: [],
   checks: green, files: ["src/frontend/chat.js", "test/chat.test.js"],
 };
 
@@ -57,4 +57,19 @@ test("it never merges a PR that touches safety, workflow, dependency or approved
 
 test("it never merges a PR from a fork, even with a factory branch name", () => {
   refused({ crossRepository: true }, /fork/);
+});
+
+test("it merges only files on the allow list, so a new unlisted file needs a human", () => {
+  const outside = [
+    "src/sitecustomize.py", "src/careconnect/__init__.py", "src/careconnect/new_module.py",
+    "Docs/Labs-Notebooks/lab_helpers/runtime_entrypoint.py", "test/__init__.py", "test/conftest.py",
+    "src/frontend/../careconnect/x.py", "random.txt",
+  ];
+  for (const file of outside) {
+    refused({ files: ["src/frontend/chat.js", file] }, /allow list/);
+  }
+});
+
+test("it never merges a PR with more than 100 changed files", () => {
+  refused({ changedFiles: 101 }, /changed files/);
 });

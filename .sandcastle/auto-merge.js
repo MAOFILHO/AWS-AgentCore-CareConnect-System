@@ -21,9 +21,15 @@ export const PROTECTED = [
   "test/auto-merge.test.js",
 ];
 
+// The factory merges only files that match here. A new file in any other place needs a human,
+// so a file this list forgot to protect fails closed.
+const ALLOWED = [/^src\/frontend\/[^.][^/]*(\/[^/]+)*$/, /^test\/[^/]+\.test\.js$/, /^(README|GLOSSARY)\.md$/];
+
+const isAllowed = (file) => !file.includes("..") && ALLOWED.some((re) => re.test(file));
+
 const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.startsWith(p) : file === p));
 
-export function decide({ enabled, crossRepository, branch, draft, labels, checks, files }) {
+export function decide({ enabled, crossRepository, branch, draft, labels, checks, files, changedFiles }) {
   if (!enabled) return { merge: false, reason: "auto-merge is switched off" };
   if (crossRepository) return { merge: false, reason: "PR comes from a fork" };
   if (!branch.startsWith("sandcastle/")) return { merge: false, reason: "not a factory branch" };
@@ -36,7 +42,10 @@ export function decide({ enabled, crossRepository, branch, draft, labels, checks
       return { merge: false, reason: `check ${name} has not passed` };
     }
   }
+  if (changedFiles > 100) return { merge: false, reason: `PR has ${changedFiles} changed files` };
   const hit = files.find(isProtected);
   if (hit) return { merge: false, reason: `PR touches protected file ${hit}` };
+  const outside = files.find((f) => !isAllowed(f));
+  if (outside) return { merge: false, reason: `${outside} is not on the allow list` };
   return { merge: true, reason: "all checks pass" };
 }

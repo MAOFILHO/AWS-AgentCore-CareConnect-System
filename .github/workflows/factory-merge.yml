@@ -34,7 +34,7 @@ jobs:
           pr="$(gh pr list --head "$BRANCH" --state open --json number,isCrossRepository \
             -q '[.[] | select(.isCrossRepository | not)][0].number // empty')"
           [ -n "$pr" ] || { echo "no open PR for $BRANCH"; exit 0; }
-          info="$(gh pr view "$pr" --json headRefName,headRefOid,isCrossRepository,isDraft,labels)"
+          info="$(gh pr view "$pr" --json changedFiles,headRefName,headRefOid,isCrossRepository,isDraft,labels)"
           # A rename reports its new path in `filename` and its old path in `previous_filename`: check both.
           files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/files" \
             --jq '.[] | .filename, (.previous_filename // empty)' | jq -R . | jq -s .)"
@@ -42,7 +42,7 @@ jobs:
           [ -n "$checks" ] || checks='[]'
           decision="$(jq -n --argjson info "$info" --argjson files "$files" --argjson checks "$checks" \
             --arg enabled "$ENABLED" \
-            '{enabled: ($enabled == "true"), branch: $info.headRefName, crossRepository: $info.isCrossRepository, draft: $info.isDraft,
+            '{enabled: ($enabled == "true"), branch: $info.headRefName, crossRepository: $info.isCrossRepository, changedFiles: $info.changedFiles, draft: $info.isDraft,
               labels: [$info.labels[].name], checks: $checks, files: $files}' | node .sandcastle/auto-merge-cli.js)"
           echo "$decision"
           reason="$(jq -r .reason <<<"$decision")"
