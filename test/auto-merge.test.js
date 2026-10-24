@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { decide, isHumanGate } from "../.sandcastle/auto-merge.js";
 
 const REQUIRED = ["tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review"];
@@ -82,4 +83,9 @@ test("isHumanGate is true only for a protected-path blocker that asks for human 
   assert.equal(isHumanGate({ ...gate, file: "src/frontend/chat.js" }), false);
   assert.equal(isHumanGate({ ...gate, fix: "human review required." }), true);
   assert.equal(isHumanGate({ ...gate, fix: "Sanitize X; human review required" }), false);
+});
+
+test("security-prompt.md still tells the reviewer to write the human-gate phrase", () => {
+  const prompt = readFileSync(new URL("../.sandcastle/security-prompt.md", import.meta.url), "utf8");
+  assert.match(prompt, /human review required/i);
 });
