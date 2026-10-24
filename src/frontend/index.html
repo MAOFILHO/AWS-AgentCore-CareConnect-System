@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CareConnect</title>
+</head>
+<body>
+  <h1>CareConnect</h1>
+  <form id="chat-form">
+    <label for="question">Your question</label>
+    <input id="question" name="question" autocomplete="off" required>
+    <button type="submit">Ask</button>
+  </form>
+  <div id="reply" aria-live="polite"></div>
+  <script src="config.js"></script>
+  <script type="module" src="chat.js"></script>
+</body>
+</html>
