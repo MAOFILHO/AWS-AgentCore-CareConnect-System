@@ -1,5 +1,3 @@
-export const ESCALATION_NOTICE = "A licensed clinician will follow up with you.";
-export const BLOCK_NOTICE = "I can't help with that request.";
 export const ERROR_NOTICE = "Something went wrong. Please try again.";
 
 // Turn the API reply into what the page shows. Anything unexpected is the fixed error.
@@ -12,8 +10,9 @@ export async function ask(question, { apiUrl, fetch }) {
     });
     if (!res.ok) return { text: ERROR_NOTICE, citations: [] };
     const body = await res.json();
-    if (body.decision === "escalate") return { text: ESCALATION_NOTICE, citations: [] };
-    if (body.decision === "block") return { text: BLOCK_NOTICE, citations: [] };
+    if (["escalate", "block", "stop"].includes(body.decision) && typeof body.reply === "string") {
+      return { text: body.reply, citations: [] };
+    }
     if (body.decision === "allow" && typeof body.reply === "string") {
       const citations = Array.isArray(body.citations) ? body.citations.filter((c) => typeof c === "string") : [];
       return { text: body.reply, citations };
