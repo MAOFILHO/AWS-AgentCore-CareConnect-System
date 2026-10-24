@@ -30,6 +30,8 @@ from strands import tool
 # ---------------------------------------------------------------------------
 # UPDATE THIS if you built in a different AWS region.
 REGION = "us-east-1"
+# Any line the Supervisor parser could read as a marker, whatever whitespace follows.
+_MARKER_LINE = re.compile(r"^[^\S\n]*(?:Source:|Passage\s+\d+)[^\n]*$", re.MULTILINE | re.IGNORECASE)
 
 
 # Read the Knowledge Base ID when the tool is called, not when this file is imported.
@@ -88,7 +90,7 @@ def search_docs(query: str) -> str:
     for number, result in enumerate(results, start=1):
         content = result.get("content", {}).get("text", "")
         # A document must not forge the marker lines the Supervisor parses.
-        content = re.sub(r"^[ \t]*(Source:|Passage \d+)[ \t]*\r?$", "", content, flags=re.MULTILINE | re.IGNORECASE)
+        content = _MARKER_LINE.sub("", content)
         source = (
             result.get("location", {})
             .get("s3Location", {})
