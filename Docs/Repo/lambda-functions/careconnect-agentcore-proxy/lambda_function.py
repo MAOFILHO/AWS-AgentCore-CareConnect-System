@@ -18,6 +18,7 @@ HOW TO DEPLOY (console)
   5. Give the Lambda's execution role permission to call the runtime
      (bedrock-agentcore:InvokeAgentRuntime).
   6. Connect it to an API Gateway POST /careconnect route.
+  7. Add pydantic (v2) to the function through a layer or the deploy package.
 
 >>> THINGS YOU MUST UPDATE ARE MARKED "CHANGE #" BELOW <<<
 """
@@ -38,6 +39,18 @@ ALLOWED_ORIGIN = "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN"
 
 import json
 import re
+
+from pydantic import BaseModel, ConfigDict, StrictStr
+from typing import Literal
+
+
+# Same contract as careconnect.api_reply.ApiReply (this Lambda deploys alone).
+class ApiReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["allow", "escalate", "block", "stop"]
+    reply: StrictStr
+    citations: list[StrictStr]
 
 
 # Build the CORS headers. The allow-origin header is added only when the
@@ -132,17 +145,7 @@ def lambda_handler(event, context):
 
     # The runtime returns {decision, reply, citations}. Any other shape is the fixed error.
     try:
-        result = json.loads(_clean(_extract_text_from_sse(raw)) or _clean(raw))
-        decision, reply, citations = result["decision"], result["reply"], result["citations"]
-        valid = (
-            set(result) == {"decision", "reply", "citations"}
-            and decision in ("allow", "escalate", "block", "stop")
-            and isinstance(reply, str)
-            and isinstance(citations, list)
-            and all(isinstance(c, str) for c in citations)
-        )
+        result = ApiReply.model_validate_json(_clean(_extract_text_from_sse(raw)) or _clean(raw))
     except Exception:
-        valid = False
-    if not valid:
         return _reply(event, 500, {"error": "Request failed."})
-    return _reply(event, 200, {"decision": decision, "reply": reply, "citations": citations})
+    return _reply(event, 200, result.model_dump())

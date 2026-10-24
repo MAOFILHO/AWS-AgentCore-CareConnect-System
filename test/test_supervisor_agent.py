@@ -7,7 +7,7 @@ from careconnect.budget import BUDGET_MESSAGE, Budgets, load_budgets
 from careconnect.fakes import FakeCostMeter
 from careconnect.supervisor import ESCALATION_NOTICE
 
-PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/visiting.md"
+PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
 
 
 class DeployableSupervisorTest(unittest.TestCase):
@@ -34,7 +34,7 @@ class DeployableSupervisorTest(unittest.TestCase):
         out = self.api("visiting hours")
         self.assertEqual(set(out), {"decision", "reply", "citations"})
         self.assertEqual(out["decision"], "allow")
-        self.assertEqual(out["citations"], ["s3://docs/visiting.md"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/visiting.md"])
         self.assertNotIn("visiting hours", str(out))
 
     def test_api_escalate(self):

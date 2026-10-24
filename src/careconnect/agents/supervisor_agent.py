@@ -30,11 +30,13 @@ HOW TO USE
 
 import logging
 import os
+import re
 import uuid
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
 from careconnect.agents.escalation_agent import escalate
-from careconnect.agents.verification_agent import extract_sources, get_guardrail_settings, verify
+from careconnect.agents.verification_agent import get_guardrail_settings, verify
+from careconnect.api_reply import ApiReply
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
@@ -122,8 +124,8 @@ def run_task_tool(request, state):
             tools = mcp_client.list_tools_sync()
             agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=model)
             return str(agent(request))
-    except Exception as exc:
-        return f"[task/tool agent error - gateway call failed: {exc}]"
+    except Exception:
+        return "[task/tool agent error - gateway call failed]"
 
 
 def run_escalation(request, state):
@@ -238,16 +240,22 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         return {**outcome, "decision": "escalate", "draft_response": escalation_notice(request),
                 "verification": verification}  # withhold the draft
     return {**outcome, "decision": "allow", "draft_response": draft, "verification": verification,
-            "citations": sorted(extract_sources(evidence))}
+            "citations": approved_sources(evidence)}
+
+
+def approved_sources(evidence):
+    """Citations are the retrieval Source URIs under approved/ only."""
+    uris = re.findall(r"^Source:\s*\n(s3://[^\s/]+/approved/\S+)", evidence, flags=re.MULTILINE)
+    return sorted(set(uris))
 
 
 def api_result(outcome):
     """The API reply: decision, reply and citations only. Never the request text."""
-    return {
-        "decision": outcome["decision"],
-        "reply": outcome["draft_response"],
-        "citations": outcome.get("citations", []),
-    }
+    return ApiReply(
+        decision=outcome["decision"],
+        reply=outcome["draft_response"],
+        citations=outcome.get("citations", []),
+    ).model_dump()
 
 
 # ---------------------------------------------------------------------------
@@ -274,5 +282,5 @@ if __name__ == "__main__":
         print("\n--- Draft response ---\n")
         print(outcome["draft_response"])
         print("\n--- Verification ---")
-        print(outcome["verification"].get("verification_status", "n/a"))
+        print(outcome.get("verification", {}).get("verification_status", "n/a"))
         print()
