@@ -21,6 +21,7 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 """
 
 import os
+import re
 
 from strands import tool
 
@@ -86,6 +87,8 @@ def search_docs(query: str) -> str:
     passages = []
     for number, result in enumerate(results, start=1):
         content = result.get("content", {}).get("text", "")
+        # A document must not forge the marker lines the Supervisor parses.
+        content = re.sub(r"^[ \t]*(Source:|Passage \d+)[ \t]*\r?$", "", content, flags=re.MULTILINE | re.IGNORECASE)
         source = (
             result.get("location", {})
             .get("s3Location", {})
