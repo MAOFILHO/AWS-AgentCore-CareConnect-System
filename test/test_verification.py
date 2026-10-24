@@ -8,7 +8,7 @@ from careconnect.fakes import (
     FakeGuardrail,
     FakeKnowledgeBase,
 )
-from careconnect.supervisor import ESCALATION_NOTICE, supervisor_flow
+from careconnect.supervisor import ESCALATION_NOTICE, UNVERIFIED_REASON, supervisor_flow
 from careconnect.verification import verify
 
 DOCS = {"visiting-hours-and-policy.md": "General ward visiting hours are 11:00-20:00."}
@@ -30,6 +30,8 @@ class VerificationGateTest(unittest.TestCase):
         self.assertEqual(out["reply"], ESCALATION_NOTICE)
         self.assertEqual(out["citations"], [])
         self.assertEqual(out["decision"], "escalate")
+        self.assertEqual(out["escalation"]["category"], "unverified_answer")
+        self.assertEqual(out["escalation"]["reason"], UNVERIFIED_REASON)
 
     def test_draft_without_citation_shows_notice_only(self):
         result = verify("Visiting is 11:00-20:00.", [], {}, FakeGrounding(), FakeGuardrail())
