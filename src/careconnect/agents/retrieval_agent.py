@@ -25,6 +25,8 @@ import re
 
 from strands import tool
 
+from careconnect.safety_gate import sanitize_retrieved
+
 # ---------------------------------------------------------------------------
 # AWS configuration
 # ---------------------------------------------------------------------------
@@ -89,8 +91,10 @@ def search_docs(query: str) -> str:
     passages = []
     for number, result in enumerate(results, start=1):
         content = result.get("content", {}).get("text", "")
-        # A document must not forge the marker lines the Supervisor parses.
-        content = _MARKER_LINE.sub("", content)
+        # A document must not forge the marker lines the Supervisor parses. Strip
+        # them after the same normalisation the Supervisor applies, so nothing
+        # becomes a marker later.
+        content = _MARKER_LINE.sub("", sanitize_retrieved(content))
         source = (
             result.get("location", {})
             .get("s3Location", {})
