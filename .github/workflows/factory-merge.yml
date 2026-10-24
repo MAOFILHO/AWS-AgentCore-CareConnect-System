@@ -49,7 +49,7 @@ jobs:
           if [ "$(jq -r .merge <<<"$decision")" = "true" ]; then
             gh pr merge "$pr" --merge --match-head-commit "$(jq -r .headRefOid <<<"$info")"
             echo "merged PR #$pr"
-          elif [[ "$reason" == "PR touches protected file"* ]] && ! jq -e '.labels[] | select(.name == "protected-paths")' <<<"$info" >/dev/null; then
+          elif [[ "$reason" == "PR touches protected file"* ]]; then
             gh label create protected-paths --color d93f0b --description "A human merges this PR" 2>/dev/null || true
             gh pr edit "$pr" --add-label protected-paths
             gh pr comment "$pr" --body "Not auto-merged: $reason. A human merges it with \`bash .sandcastle/merge.sh $pr\`."

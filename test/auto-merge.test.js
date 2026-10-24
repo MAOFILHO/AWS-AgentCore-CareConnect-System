@@ -45,7 +45,9 @@ test("it never merges a PR that touches safety, workflow, dependency or approved
     "Docs/Repo/careconnect-approved-docs/approved/visiting-hours-and-policy.md",
     "Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py",
     ".semgrep.yml", "eslint.config.js", "tsconfig.json", "CLAUDE.md",
-    "test/test_untrusted_documents.py", "src/careconnect/model.json",
+    "test/test_untrusted_documents.py", "src/careconnect/model.json", "src/careconnect/fakes.py",
+    "test/test_logging.py", "test/test_verification.py", "test/test_supervisor.py", "test/test_gateway.py",
+    "test/test_supervisor_agent.py", "test/test_proxy_lambda.py", "test/auto-merge.test.js",
   ];
   for (const file of protectedFiles) {
     refused({ files: ["src/frontend/chat.js", file] }, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

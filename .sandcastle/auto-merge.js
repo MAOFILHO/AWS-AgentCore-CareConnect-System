@@ -15,7 +15,9 @@ export const PROTECTED = [
   "package.json", "package-lock.json", "requirements.txt",
   // Configs of the checks themselves: a PR must not weaken the gate it is judged by.
   ".semgrep.yml", "eslint.config.js", "tsconfig.json", "CLAUDE.md",
-  "test/test_untrusted_documents.py", "src/careconnect/model.json",
+  "test/test_untrusted_documents.py", "src/careconnect/model.json", "src/careconnect/fakes.py",
+  "test/test_logging.py", "test/test_verification.py", "test/test_supervisor.py", "test/test_gateway.py",
+  "test/test_supervisor_agent.py", "test/test_proxy_lambda.py", "test/auto-merge.test.js",
 ];
 
 const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.startsWith(p) : file === p));
