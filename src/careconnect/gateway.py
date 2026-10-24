@@ -14,6 +14,7 @@ class AppointmentStatus(BaseModel):
 
 class StagedRefill(BaseModel):
     action: Literal["submit_refill"] = "submit_refill"
+    patient_reference: str
     drug: str
     status: Literal["awaiting_approval"] = "awaiting_approval"
     idempotency_key: str
@@ -23,7 +24,7 @@ class StagedRefill(BaseModel):
 class FakeGateway:
     """Synthetic hospital tools. A refill is staged for human approval, never submitted."""
 
-    def check_appointment_status(self, patient_reference="PATIENT-DEMO-001"):
+    def check_appointment_status(self, patient_reference):
         return AppointmentStatus(
             patient_reference=patient_reference,
             appointment_status="scheduled",
@@ -31,7 +32,7 @@ class FakeGateway:
             appointment_reference="APT-DEMO-1001",
         )
 
-    def stage_refill_request(self, drug, idempotency_key=None):
-        if not idempotency_key:
+    def stage_refill_request(self, patient_reference, drug, idempotency_key=None):
+        if not idempotency_key or not idempotency_key.strip():
             raise ValueError("idempotency_key is required")
-        return StagedRefill(drug=drug, idempotency_key=idempotency_key)
+        return StagedRefill(patient_reference=patient_reference, drug=drug, idempotency_key=idempotency_key)

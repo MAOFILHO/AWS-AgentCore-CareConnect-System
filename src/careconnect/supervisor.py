@@ -14,13 +14,14 @@ ESCALATION_NOTICE = "A licensed clinician will follow up with you."
 def supervisor_flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
     *, approved, cost_meter, budgets=None, clock=None, gateway=None, idempotency_key=None,
+    patient_reference=None,
 ):
     tracker = BudgetTracker(budgets or load_budgets(), cost_meter, clock)
     request_id = str(uuid.uuid4())
     try:
         return _flow(
             request, knowledge_base, ticket_store, grounding, guardrail, document_processor,
-            approved, tracker, request_id, gateway, idempotency_key,
+            approved, tracker, request_id, gateway, idempotency_key, patient_reference,
         )
     except BudgetExceeded:
         return {
@@ -31,7 +32,7 @@ def supervisor_flow(
 
 def _flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor,
-    approved, tracker, request_id, gateway=None, idempotency_key=None,
+    approved, tracker, request_id, gateway=None, idempotency_key=None, patient_reference=None,
 ):
     gate = classify(request)
     outcome = {"request_id": request_id, "citations": [], "escalation": None}
@@ -52,7 +53,7 @@ def _flow(
     if gate["injection"]:
         return {**outcome, "decision": "block", "reply": "I can't help with that request."}
     if gateway:
-        task = _task_reply(request, gateway, idempotency_key, tracker)
+        task = _task_reply(request, gateway, idempotency_key, patient_reference, tracker)
         if task == "escalate":
             return escalate()
         if task:
@@ -82,28 +83,32 @@ REFILL_REQUEST = re.compile(r"\brefill\s+(?:of|for|my)\s+(?:my\s+)?(\w+)", re.IG
 NOT_A_DRUG = {"me", "my", "us", "it", "them"}
 
 
-def _task_reply(request, gateway, idempotency_key, tracker):
+def _task_reply(request, gateway, idempotency_key, patient_reference, tracker):
     """Task/Tool agent seam: staged reply, "escalate" on a rejected refill, None if not a task."""
     refill = REFILL_REQUEST.search(request)
     if refill:
         tracker.step("task_tool")
+        if not patient_reference:  # fail closed: no authenticated patient, a human decides
+            return "escalate"
         if refill.group(1).lower() in NOT_A_DRUG:  # fail closed: no drug named, a human decides
             return "escalate"
         try:
-            staged = gateway.stage_refill_request(refill.group(1), idempotency_key)
+            staged = gateway.stage_refill_request(patient_reference, refill.group(1), idempotency_key)
         except ValueError:  # fail closed: a refill without a key is never staged
             return "escalate"
         return {
             "reply": f"Your {staged.drug} refill is staged and awaits human approval. "
             "It has not been submitted.",
-            "task": staged.model_dump(),
+            "task": staged.model_dump(exclude={"patient_reference"}),
         }
     if re.search(r"\bappointment status\b", request, re.IGNORECASE):
         tracker.step("task_tool")
-        status = gateway.check_appointment_status()
+        if not patient_reference:  # fail closed: no authenticated patient, a human decides
+            return "escalate"
+        status = gateway.check_appointment_status(patient_reference)
         return {
             "reply": f"Your {status.department} appointment {status.appointment_reference} "
             f"is {status.appointment_status}.",
-            "task": status.model_dump(),
+            "task": status.model_dump(exclude={"patient_reference"}),
         }
     return None

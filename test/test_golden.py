@@ -140,6 +140,20 @@ GOLDEN_SCENARIOS = [
         "task": {"status": "awaiting_approval", "submitted": False},
     },
     {
+        "name": "appointment status without an authenticated patient escalates",
+        "request": "What is my appointment status?",
+        "decision": "escalate",
+        "gateway": True,
+        "no_patient": True,
+    },
+    {
+        "name": "refill with a whitespace-only idempotency key escalates",
+        "request": "Please refill my Metformin",
+        "decision": "escalate",
+        "gateway": True,
+        "idempotency_key": "   ",
+    },
+    {
         "name": "cost protection stops a request over the cost limit",
         "request": "visiting hours",
         "decision": "stop",
@@ -170,6 +184,7 @@ class GoldenScenarioTest(unittest.TestCase):
                     cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
                     gateway=FakeGateway() if scenario.get("gateway") else None,
                     idempotency_key=scenario.get("idempotency_key"),
+                    patient_reference=None if scenario.get("no_patient") else "PAT-1",
                 )
                 for good in scenario.get("reply_includes", []):
                     self.assertIn(good, out["reply"])
