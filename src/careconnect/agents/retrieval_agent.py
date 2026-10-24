@@ -21,14 +21,19 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 """
 
 import os
+import re
 
 from strands import tool
+
+from careconnect.safety_gate import sanitize_retrieved
 
 # ---------------------------------------------------------------------------
 # AWS configuration
 # ---------------------------------------------------------------------------
 # UPDATE THIS if you built in a different AWS region.
 REGION = "us-east-1"
+# Any line the Supervisor parser could read as a marker, whatever whitespace follows.
+_MARKER_LINE = re.compile(r"^[^\S\n]*(?:Source:|Passage\s+\d+)[^\n]*$", re.MULTILINE | re.IGNORECASE)
 
 
 # Read the Knowledge Base ID when the tool is called, not when this file is imported.
@@ -86,6 +91,10 @@ def search_docs(query: str) -> str:
     passages = []
     for number, result in enumerate(results, start=1):
         content = result.get("content", {}).get("text", "")
+        # A document must not forge the marker lines the Supervisor parses. Strip
+        # them after the same normalisation the Supervisor applies, so nothing
+        # becomes a marker later.
+        content = _MARKER_LINE.sub("", sanitize_retrieved(content))
         source = (
             result.get("location", {})
             .get("s3Location", {})
