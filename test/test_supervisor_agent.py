@@ -11,10 +11,10 @@ PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visitin
 
 
 class DeployableSupervisorTest(unittest.TestCase):
-    def flow(self, text, status="PASS", budgets=None, meter=None, verify_error=None):
+    def flow(self, text, status="PASS", budgets=None, meter=None, verify_error=None, passages=PASSAGES):
         verify = mock.Mock(return_value={"verification_status": status}, side_effect=verify_error)
         escalate = mock.Mock(return_value={"ticket_id": "T1", "status": "pending_review"})
-        retrieval = mock.Mock(search_docs=mock.Mock(return_value=PASSAGES))
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
         env = {"CARECONNECT_KB_ID": "kb"}
         with mock.patch.object(supervisor_agent, "verify", verify), \
                 mock.patch.object(supervisor_agent, "escalate", escalate), \
@@ -36,6 +36,13 @@ class DeployableSupervisorTest(unittest.TestCase):
         self.assertEqual(out["decision"], "allow")
         self.assertEqual(out["citations"], ["s3://docs/approved/visiting.md"])
         self.assertNotIn("visiting hours", str(out))
+
+    def test_evidence_without_approved_source_escalates(self):
+        for passages in ("Visiting hours are 11:00-20:00.", "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/evaluation-untrusted/x.md"):
+            out = self.api("visiting hours", passages=passages)
+            self.assertEqual((out["decision"], out["citations"]), ("escalate", []))
+            self.assertNotIn("11:00", out["reply"])
+            self.escalate.assert_called_once()
 
     def test_api_escalate(self):
         out = self.api("I have chest pain")
