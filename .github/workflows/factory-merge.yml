@@ -1,0 +1,56 @@
+# Merges a factory PR once every check has passed. The merge is done by this Action, never by an agent.
+# Off until the repository variable FACTORY_AUTOMERGE is "true". The rules live in .sandcastle/auto-merge.js.
+# Never check out the PR branch here: this job holds a write token.
+name: factory-merge
+on:
+  workflow_run:
+    workflows: [factory-ci, factory-review, factory-security]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+concurrency:
+  group: factory-merge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'sandcastle/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4 (default branch only)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with: { node-version: 22 }
+      - name: Decide and merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          ENABLED: ${{ vars.FACTORY_AUTOMERGE }}
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list --head "$BRANCH" --state open --json number,isCrossRepository \
+            -q '[.[] | select(.isCrossRepository | not)][0].number // empty')"
+          [ -n "$pr" ] || { echo "no open PR for $BRANCH"; exit 0; }
+          info="$(gh pr view "$pr" --json changedFiles,headRefName,headRefOid,isCrossRepository,isDraft,labels)"
+          # A rename reports its new path in `filename` and its old path in `previous_filename`: check both.
+          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' | jq -R . | jq -s .)"
+          checks="$(gh pr checks "$pr" --json name,bucket 2>/dev/null || true)"
+          [ -n "$checks" ] || checks='[]'
+          decision="$(jq -n --argjson info "$info" --argjson files "$files" --argjson checks "$checks" \
+            --arg enabled "$ENABLED" \
+            '{enabled: ($enabled == "true"), branch: $info.headRefName, crossRepository: $info.isCrossRepository, changedFiles: $info.changedFiles, draft: $info.isDraft,
+              labels: [$info.labels[].name], checks: $checks, files: $files}' | node .sandcastle/auto-merge-cli.js)"
+          echo "$decision"
+          reason="$(jq -r .reason <<<"$decision")"
+          if [ "$(jq -r .merge <<<"$decision")" = "true" ]; then
+            gh pr merge "$pr" --merge --match-head-commit "$(jq -r .headRefOid <<<"$info")"
+            echo "merged PR #$pr"
+          elif [[ "$reason" == "PR touches protected file"* ]]; then
+            gh label create protected-paths --color d93f0b --description "A human merges this PR" 2>/dev/null || true
+            gh pr edit "$pr" --add-label protected-paths
+            gh pr comment "$pr" --body "Not auto-merged: $reason. A human merges it with \`bash .sandcastle/merge.sh $pr\`."
+          fi

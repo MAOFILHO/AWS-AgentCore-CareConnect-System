@@ -16,7 +16,18 @@ jobs:
         with: { fetch-depth: 2 }
       - uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda  # main as of 2026-10-20
         with:
+          run-every-commit: true  # the action scans a PR once and skips later pushes unless this is set
           comment-pr: true
           upload-results: true
           claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           custom-security-scan-instructions: .sandcastle/security-prompt.md
+      # The action only warns on findings and reports 0 when the scan errors, so the check would stay green.
+      # factory-merge relies on this check meaning "no blocker": fail on any finding above LOW or MEDIUM, an error or no result.
+      - name: Fail on a blocking finding or a missing result
+        run: |
+          f="$GITHUB_WORKSPACE/claudecode-results.json"
+          [ -s "$f" ] || { echo "no scan result: failing closed"; exit 1; }
+          if jq -e '.error' "$f" >/dev/null; then echo "scan error: failing closed"; exit 1; fi
+          # The action says HIGH/MEDIUM/LOW; .sandcastle/security-prompt.md says blocker/major/minor. Anything not known-safe fails.
+          bad="$(jq '[(.findings // [])[] | select((.severity // "") | ascii_upcase | IN("LOW", "MEDIUM", "MINOR") | not)] | length' "$f")"
+          [ "$bad" = "0" ] || { echo "$bad blocking finding(s)"; exit 1; }
