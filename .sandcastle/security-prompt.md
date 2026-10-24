@@ -24,7 +24,7 @@ Read changed files in full where needed. Trace data from every new input to ever
 - **Data exposure**: responses, logs, error messages leaking ids, emails, tokens, stack traces.
 - **Auth and money**: anything that grants access, skips a signature check, changes a role, touches billing.
 - **Dependencies**: new packages: needed? maintained? pinned? Any install script or postinstall?
-- **CI and workflows**: changes under `.github/`, Dockerfiles, deploy config. These always need a human; flag as `blocker` with fix "human review required".
+- **CI and workflows**: changes under `.github/`, Dockerfiles, deploy config. These always need a human; flag as `blocker` with fix "human review required". The exact fix text is matched by `isHumanGate` in `auto-merge.js`; keep them in sync.
 - **Tests**: a test disabled, skipped or deleted is `major`.
 
 Run the project's checks if they include a security tool (Semgrep, gitleaks). Report their output.

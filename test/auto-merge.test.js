@@ -80,4 +80,5 @@ test("isHumanGate is true only for a protected-path blocker that asks for human 
   assert.equal(isHumanGate({ ...gate, severity: "major" }), false);
   assert.equal(isHumanGate({ ...gate, file: "src/careconnect/agents/supervisor_agent.py", fix: "validate the input" }), false);
   assert.equal(isHumanGate({ ...gate, file: "src/frontend/chat.js" }), false);
+  assert.equal(isHumanGate({ ...gate, fix: "Sanitize X; human review required" }), false);
 });
