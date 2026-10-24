@@ -18,6 +18,7 @@ import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { execFileSync } from "node:child_process";
 import { z } from "zod";
+import { isHumanGate } from "./auto-merge.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -83,6 +84,11 @@ const gh = (...args: string[]) =>
   execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
 
 const log = (tag: string, msg: string) => console.log(`[${tag}] ${msg}`);
+
+// A human-gate blocker is left for the human merger; it does not fail the security review.
+function securityPassed(v: Verdict): boolean {
+  return v.verdict === "PASS" || (v.findings.some(isHumanGate) && v.findings.every((f) => isHumanGate(f) || f.severity === "minor"));
+}
 
 function renderFindings(name: string, v: Verdict): string {
   if (v.findings.length === 0) return `### ${name}: PASS\n${v.summary}\n`;
@@ -186,8 +192,8 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
         // Stagger the start: two containers writing ~/.gitconfig at once fail with "could not lock config file".
         new Promise((r) => setTimeout(r, 5000)).then(() => review("security", MODELS.security, "./.sandcastle/security-prompt.md")),
       ]);
-      const blocking = [...code.findings, ...sec.findings].filter((f) => f.severity !== "minor");
-      if (code.verdict === "PASS" && sec.verdict === "PASS") break;
+      const blocking = [...code.findings, ...sec.findings].filter((f) => f.severity !== "minor" && !isHumanGate(f));
+      if (code.verdict === "PASS" && securityPassed(sec)) break;
       if (round === MAX_REVIEW_ROUNDS) break;
 
       // Fix: same implementer session style, narrow prompt, only the findings
@@ -215,8 +221,8 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     // Push + PR. The agent never merges. The factory-merge Action or a human with .sandcastle/merge.sh merges.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
-    const passed = codeV.verdict === "PASS" && secV.verdict === "PASS";
-    const securityBlock = secV.findings.some((f) => f.severity === "blocker");
+    const passed = codeV.verdict === "PASS" && securityPassed(secV);
+    const securityBlock = secV.findings.some((f) => f.severity === "blocker" && !isHumanGate(f));
     const body = [
       `Closes #${issue.id}`,
       "",

@@ -29,6 +29,10 @@ const isAllowed = (file) => !file.includes("..") && ALLOWED.some((re) => re.test
 
 const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.startsWith(p) : file === p));
 
+// A protected-path blocker whose only fix is "human review required" never clears: a human merges those PRs anyway.
+export const isHumanGate = (finding) =>
+  finding.severity === "blocker" && isProtected(finding.file) && /human review required/i.test(finding.fix);
+
 export function decide({ enabled, crossRepository, branch, draft, labels, checks, files, changedFiles }) {
   if (!enabled) return { merge: false, reason: "auto-merge is switched off" };
   if (crossRepository) return { merge: false, reason: "PR comes from a fork" };

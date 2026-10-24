@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide } from "../.sandcastle/auto-merge.js";
+import { decide, isHumanGate } from "../.sandcastle/auto-merge.js";
 
 const REQUIRED = ["tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review"];
 const green = REQUIRED.map((name) => ({ name, bucket: "pass" }));
@@ -72,4 +72,12 @@ test("it merges only files on the allow list, so a new unlisted file needs a hum
 
 test("it never merges a PR with more than 100 changed files", () => {
   refused({ changedFiles: 101 }, /changed files/);
+});
+
+test("isHumanGate is true only for a protected-path blocker that asks for human review", () => {
+  const gate = { severity: "blocker", file: ".github/workflows/x.yml", fix: "Human review required" };
+  assert.equal(isHumanGate(gate), true);
+  assert.equal(isHumanGate({ ...gate, severity: "major" }), false);
+  assert.equal(isHumanGate({ ...gate, file: "src/careconnect/agents/supervisor_agent.py", fix: "validate the input" }), false);
+  assert.equal(isHumanGate({ ...gate, file: "src/frontend/chat.js" }), false);
 });
