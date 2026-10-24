@@ -6,7 +6,7 @@ Riverside Health patient-support assistant (console/CLI build).
 WHAT THIS LAMBDA DOES
   It sits between the public API Gateway and the deployed Supervisor runtime.
   It receives a web request { "prompt": "..." }, calls the AgentCore runtime,
-  cleans the streamed response into a single answer, and returns it with the
+  reads the {decision, reply, citations} result, and returns it with the
   CORS headers a browser needs. Failures return a short fixed error message only.
 
 HOW TO DEPLOY (console)
@@ -130,6 +130,19 @@ def lambda_handler(event, context):
     except Exception:
         return _reply(event, 500, {"error": "Request failed."})
 
-    # Turn the streamed response into a clean single answer and return it.
-    answer = _clean(_extract_text_from_sse(raw)) or _clean(raw)
-    return _reply(event, 200, {"answer": answer})
+    # The runtime returns {decision, reply, citations}. Any other shape is the fixed error.
+    try:
+        result = json.loads(_clean(_extract_text_from_sse(raw)) or _clean(raw))
+        decision, reply, citations = result["decision"], result["reply"], result["citations"]
+        valid = (
+            set(result) == {"decision", "reply", "citations"}
+            and decision in ("allow", "escalate", "block", "stop")
+            and isinstance(reply, str)
+            and isinstance(citations, list)
+            and all(isinstance(c, str) for c in citations)
+        )
+    except Exception:
+        valid = False
+    if not valid:
+        return _reply(event, 500, {"error": "Request failed."})
+    return _reply(event, 200, {"decision": decision, "reply": reply, "citations": citations})

@@ -34,7 +34,7 @@ import uuid
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
 from careconnect.agents.escalation_agent import escalate
-from careconnect.agents.verification_agent import get_guardrail_settings, verify
+from careconnect.agents.verification_agent import extract_sources, get_guardrail_settings, verify
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
@@ -217,26 +217,37 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         safety = check_safety(request, state)
         outcome["safety"] = safety
         if safety["blocked"]:
-            return {**outcome, "draft_response": BLOCK_NOTICE}
+            return {**outcome, "decision": "block", "draft_response": BLOCK_NOTICE}
         plan = create_plan(request, safety, state)
         outcome["plan"] = plan
         results = execute_required_agents(request, plan, state)
         draft, evidence = combine_safe_results(results, safety, state)
         if safety["clinical_detected"]:
-            return {**outcome, "draft_response": draft}
+            return {**outcome, "decision": "escalate", "draft_response": draft}
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
-        return {**outcome, "draft_response": BUDGET_MESSAGE}
+        return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
     except Exception:  # fail closed: never show the draft; no message text or error text in logs
         clinical = bool(outcome.get("safety", {}).get("clinical_detected"))
         result = "escalation_failed" if clinical else "flow_failed"
         log.error("request_id=%s safety_gate=%s outcome=%s", request_id,
                   "escalate" if clinical else "allow", result)
         notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
-        return {**outcome, "draft_response": notice}
+        return {**outcome, "decision": "escalate", "draft_response": notice}
     if verification.get("verification_status") != "PASS":
-        draft = escalation_notice(request)  # withhold the draft
-    return {**outcome, "draft_response": draft, "verification": verification}
+        return {**outcome, "decision": "escalate", "draft_response": escalation_notice(request),
+                "verification": verification}  # withhold the draft
+    return {**outcome, "decision": "allow", "draft_response": draft, "verification": verification,
+            "citations": sorted(extract_sources(evidence))}
+
+
+def api_result(outcome):
+    """The API reply: decision, reply and citations only. Never the request text."""
+    return {
+        "decision": outcome["decision"],
+        "reply": outcome["draft_response"],
+        "citations": outcome.get("citations", []),
+    }
 
 
 # ---------------------------------------------------------------------------
