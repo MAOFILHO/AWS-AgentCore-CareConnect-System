@@ -132,13 +132,17 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
   const sandbox = await sandcastle.createSandbox({ branch: issue.branch, sandbox: docker(), hooks, copyToWorktree });
   try {
     // Build
+    // Findings from an earlier failed run, read only from a comment by the factory's own account.
+    const me = gh("api", "user", "-q", ".login");
+    const prior = gh("issue", "view", issue.id, "--json", "comments", "-q",
+      `[.comments[] | select(.author.login == "${me}" and (.body | startswith("Factory: review round")))] | last | .body // ""`);
     log(tag, "implementer starting");
     const build = await sandbox.run({
       name: `implement-${issue.id}`,
       maxIterations: MAX_BUILD_ITERATIONS,
       agent: sandcastle.claudeCode(MODELS.builder),
       promptFile: "./.sandcastle/implement-prompt.md",
-      promptArgs: { TASK_ID: issue.id, ISSUE_TITLE: issue.title, BRANCH: issue.branch },
+      promptArgs: { TASK_ID: issue.id, ISSUE_TITLE: issue.title, BRANCH: issue.branch, PRIOR_FINDINGS: prior },
     });
     if (build.commits.length === 0) {
       log(tag, "no commits produced; labelling needs-human");
@@ -229,12 +233,13 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     execFileSync("git", ["push", "-u", "origin", issue.branch, "--force-with-lease"], { stdio: "inherit" });
     // A rerun on an existing branch updates the open PR instead of failing on "already exists".
     let updated = false;
-    let prUrl = gh("pr", "list", "--head", issue.branch, "--state", "open", "--json", "url", "-q", ".[0].url");
+    let prUrl = gh("pr", "list", "--head", issue.branch, "--state", "open", "--json", "url", "-q", ".[0].url // empty");
     if (prUrl) {
       gh("pr", "edit", prUrl, "--body", body);
       // Keep the draft state in step with this run's verdict: factory-merge refuses a draft.
       if (passed) gh("pr", "ready", prUrl);
       else gh("pr", "ready", "--undo", prUrl);
+      if (passed && !securityBlock) gh("pr", "edit", prUrl, "--remove-label", "needs-human");
       updated = true;
     } else {
       const prArgs = ["pr", "create", "--head", issue.branch, "--title", `${issue.title} (#${issue.id})`, "--body", body];
