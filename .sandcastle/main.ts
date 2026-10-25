@@ -86,8 +86,9 @@ const gh = (...args: string[]) =>
 const log = (tag: string, msg: string) => console.log(`[${tag}] ${msg}`);
 
 // A human-gate blocker is left for the human merger; it does not fail the security review.
-function securityPassed(v: Verdict): boolean {
-  return v.verdict === "PASS" || (v.findings.some(isHumanGate) && v.findings.every((f) => isHumanGate(f) || f.severity === "minor"));
+function securityPassed(v: Verdict, changedFiles: string[]): boolean {
+  const gate = (f: Verdict["findings"][number]) => isHumanGate(f, changedFiles);
+  return v.verdict === "PASS" || (v.findings.some(gate) && v.findings.every((f) => gate(f) || f.severity === "minor"));
 }
 
 function renderFindings(name: string, v: Verdict): string {
@@ -165,6 +166,9 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     let sec: Verdict | undefined;
     let lastReviewedSha = build.commits.at(-1)!.sha;
     const mergeBase = execFileSync("git", ["merge-base", "HEAD", issue.branch], { encoding: "utf8" }).trim();
+    // Files the branch changes; a human-gate blocker only counts for one of these.
+    const changedFiles = () =>
+      execFileSync("git", ["diff", "--name-only", mergeBase, issue.branch], { encoding: "utf8" }).split("\n").filter(Boolean);
     let baseForDiff = mergeBase; // round 1 reviews the whole branch
     while (round < MAX_REVIEW_ROUNDS) {
       round += 1;
@@ -192,8 +196,9 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
         // Stagger the start: two containers writing ~/.gitconfig at once fail with "could not lock config file".
         new Promise((r) => setTimeout(r, 5000)).then(() => review("security", MODELS.security, "./.sandcastle/security-prompt.md")),
       ]);
-      const blocking = [...code.findings, ...sec.findings].filter((f) => f.severity !== "minor" && !isHumanGate(f));
-      if (code.verdict === "PASS" && securityPassed(sec)) break;
+      const changed = changedFiles();
+      const blocking = [...code.findings, ...sec.findings].filter((f) => f.severity !== "minor" && !isHumanGate(f, changed));
+      if (code.verdict === "PASS" && securityPassed(sec, changed)) break;
       if (round === MAX_REVIEW_ROUNDS) break;
 
       // Fix: same implementer session style, narrow prompt, only the findings
@@ -221,8 +226,9 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     // Push + PR. The agent never merges. The factory-merge Action or a human with .sandcastle/merge.sh merges.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
-    const passed = codeV.verdict === "PASS" && securityPassed(secV);
-    const securityBlock = secV.findings.some((f) => f.severity === "blocker" && !isHumanGate(f));
+    const changed = changedFiles();
+    const passed = codeV.verdict === "PASS" && securityPassed(secV, changed);
+    const securityBlock = secV.findings.some((f) => f.severity === "blocker" && !isHumanGate(f, changed));
     const body = [
       `Closes #${issue.id}`,
       "",
