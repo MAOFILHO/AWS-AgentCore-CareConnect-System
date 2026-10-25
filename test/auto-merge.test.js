@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { decide, isHumanGate } from "../.sandcastle/auto-merge.js";
+import { decide, isHumanGate, PROTECTED } from "../.sandcastle/auto-merge.js";
 
 const REQUIRED = ["tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review"];
 const green = REQUIRED.map((name) => ({ name, bucket: "pass" }));
@@ -52,6 +52,8 @@ test("it never merges a PR that touches safety, workflow, dependency or approved
     "test/test_logging.py", "test/test_verification.py", "test/test_supervisor.py", "test/test_gateway.py",
     "test/test_supervisor_agent.py", "test/test_proxy_lambda.py", "test/auto-merge.test.js",
     "test/test_agents_import.py", ".claude/skills/code-review/SKILL.md", ".claude/settings.json",
+    "src/careconnect/runtime_entrypoint.py", "test/test_runtime_entrypoint.py", "src/careconnect/supervisor_model.py",
+    "src/careconnect/document_processing.py", "src/careconnect/ingest.py",
   ];
   for (const file of protectedFiles) {
     refused({ files: ["src/frontend/chat.js", file] }, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -64,12 +66,25 @@ test("it never merges a PR from a fork, even with a factory branch name", () => 
 
 test("it merges only files on the allow list, so a new unlisted file needs a human", () => {
   const outside = [
-    "src/sitecustomize.py", "src/careconnect/__init__.py", "src/careconnect/new_module.py",
+    "src/sitecustomize.py", "src/careconnect/__init__.py", "src/careconnect/agents_x/sub/y.py", "src/careconnect/sub/y.py", "test/sub/test_y.py", "src/careconnect/.x.py",
     "Docs/Labs-Notebooks/lab_helpers/runtime_entrypoint.py", "test/__init__.py", "test/conftest.py",
     "src/frontend/../careconnect/x.py", "random.txt",
   ];
   for (const file of outside) {
     refused({ files: ["src/frontend/chat.js", file] }, /allow list/);
+  }
+});
+
+test("it merges backend Python outside the protected files", () => {
+  const files = ["src/careconnect/api_reply.py", "test/test_api_reply.py"];
+  assert.deepEqual(decide({ ...ok, files }), { merge: true, reason: "all checks pass" });
+  refused({ files, checks: green.filter((c) => c.name !== "gitleaks") }, /gitleaks/);
+  refused({ files, checks: green.map((c) => (c.name === "semgrep" ? { ...c, bucket: "fail" } : c)) }, /semgrep/);
+});
+
+test("it never merges backend Python alongside a protected file", () => {
+  for (const file of ["src/careconnect/agents/x.py", ...PROTECTED.filter((p) => p.endsWith(".py"))]) {
+    refused({ files: ["src/careconnect/new_helper.py", file] }, /protected file/);
   }
 });
 
