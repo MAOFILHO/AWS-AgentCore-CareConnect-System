@@ -9,7 +9,7 @@
 //          each returning a typed verdict; the implementer fixes CHANGES
 //          up to 5 rounds, re-reviewing only the new diff
 //        branch is pushed and a PR opened (draft if a reviewer still objects)
-//   3. Merging is NOT done here. The factory-merge Action (allow-listed files only) or a human with merge.sh does that.
+//   3. Merging is NOT done here. The factory-merge Action (allow-listed files only) or the owner (or an agent in an owner-started session) with merge.sh does that.
 //
 // Everything repo-specific lives in AGENTS.md and the prompt files beside this one.
 // Run:  factory run     (or: npx tsx .sandcastle/main.ts)
@@ -223,7 +223,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       }
     }
 
-    // Push + PR. The agent never merges. The factory-merge Action or a human with .sandcastle/merge.sh merges.
+    // Push + PR. The agent never merges. The factory-merge Action or the owner (or an agent in an owner-started session) with .sandcastle/merge.sh merges.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const changed = listChangedFiles();
