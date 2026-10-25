@@ -10,7 +10,7 @@ from careconnect.fakes import FakeCostMeter
 from careconnect.supervisor import ESCALATION_FAILED_NOTICE
 
 PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
-KEYS = {"decision", "reply", "citations"}
+KEYS = {"decision", "reply", "citations", "staged"}
 
 
 class RuntimeEntrypointTest(unittest.TestCase):
@@ -52,7 +52,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
                     mock.patch.object(runtime_entrypoint, "supervisor_flow") as flow:
                 out = runtime_entrypoint.invoke(payload)
                 flow.assert_not_called()
-            self.assertEqual(out, {"decision": "escalate", "reply": ESCALATION_FAILED_NOTICE, "citations": []})
+            self.assertEqual(out, {"decision": "escalate", "reply": ESCALATION_FAILED_NOTICE, "citations": [], "staged": False})
 
     def test_delegates_to_shared_flow(self):
         self.assertIs(runtime_entrypoint.supervisor_flow, supervisor_agent.supervisor_flow)

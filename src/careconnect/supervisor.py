@@ -127,6 +127,7 @@ def _task_reply(request, gateway, idempotency_key, patient_reference, tracker):
             "reply": f"Your {staged.drug} refill is staged and awaits human approval. "
             "It has not been submitted.",
             "task": staged.model_dump(exclude={"patient_reference"}),
+            "staged": True,
         }
     if re.search(r"\bappointment status\b", request, re.IGNORECASE):
         tracker.step("task_tool")

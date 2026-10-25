@@ -85,7 +85,11 @@ class ProxyLambdaTest(unittest.TestCase):
                 sent = {"decision": decision, "reply": "ok", "citations": cites}
                 out = self.run_proxy(sent)
                 self.assertEqual(out["statusCode"], 200)
-                self.assertEqual(json.loads(out["body"]), sent)
+                self.assertEqual(json.loads(out["body"]), {**sent, "staged": False})
+
+    def test_passes_staged_through(self):
+        sent = {"decision": "allow", "reply": "ok", "citations": [], "staged": True}
+        self.assertEqual(json.loads(self.run_proxy(sent)["body"]), sent)
 
     def test_other_shapes_return_fixed_error(self):
         bad = [

@@ -40,7 +40,7 @@ ALLOWED_ORIGIN = "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN"
 import json
 import re
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Literal
 
 
@@ -51,6 +51,7 @@ class ApiReply(BaseModel):
     decision: Literal["allow", "escalate", "block", "stop"]
     reply: StrictStr
     citations: list[StrictStr]
+    staged: StrictBool = False
 
 
 # Build the CORS headers. The allow-origin header is added only when the

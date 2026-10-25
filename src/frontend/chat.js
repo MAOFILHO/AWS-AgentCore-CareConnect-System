@@ -1,6 +1,7 @@
 export const ERROR_NOTICE = "Something went wrong. Please try again.";
 const ESCALATE_STATUS = "Sent to a clinician for review.";
 const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
+const AWAITING_STATUS = "Awaiting clinician approval.";
 const STATUS = { escalate: ESCALATE_STATUS, block: STOPPED_STATUS, stop: STOPPED_STATUS };
 
 // Turn the API reply into what the page shows. Anything unexpected is the fixed error.
@@ -18,7 +19,9 @@ export async function ask(question, { apiUrl, fetch }) {
     }
     if (body.decision === "allow" && typeof body.reply === "string") {
       const citations = Array.isArray(body.citations) ? body.citations.filter((c) => typeof c === "string") : [];
-      return { text: body.reply, citations };
+      return body.staged === true
+        ? { text: body.reply, citations, status: AWAITING_STATUS }
+        : { text: body.reply, citations };
     }
   } catch {
     // fall through to the fixed error

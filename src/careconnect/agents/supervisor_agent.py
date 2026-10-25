@@ -268,6 +268,7 @@ def api_result(outcome):
         decision=outcome["decision"],
         reply=outcome["draft_response"],
         citations=outcome.get("citations", []),
+        staged=outcome.get("staged", False),
     ).model_dump()
 
 
