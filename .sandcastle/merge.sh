@@ -29,6 +29,8 @@ if [ -z "$checks" ] || [ -n "$bad" ]; then
   exit 1
 fi
 
+[ -n "$sha" ] || { echo "PR #$pr has no head commit (headRefOid is empty). Not merging." >&2; exit 1; }
+
 # Refuses the merge if the branch moved since the checks were read.
 gh pr merge "$pr" --merge --match-head-commit "$sha"
 echo "merged PR #$pr"
