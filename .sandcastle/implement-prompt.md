@@ -15,8 +15,9 @@ Work only on branch {{BRANCH}}. You are already on it. Never touch `main`.
 # BEFORE YOU WRITE CODE
 
 1. Read `AGENTS.md`: setup, checks, conventions. Follow them exactly.
-2. Read the code the issue touches. Find the real files; do not guess names.
-3. Check the issue's acceptance criteria. Each one is a test you must make pass.
+2. Read `REVIEW.md` before you write any code. Follow its "Always flag" and "Repo-specific gotchas" sections; the reviewers will fail the branch on them.
+3. Read the code the issue touches. Find the real files; do not guess names.
+4. Check the issue's acceptance criteria. Each one is a test you must make pass.
 
 # BUILD (test first)
 
