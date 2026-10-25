@@ -54,43 +54,20 @@ class DeployableSupervisorTest(unittest.TestCase):
             self.assertNotIn("11:00", out["reply"])
             self.escalate.assert_called_once()
 
-    def test_refill_questions_keep_retrieval_routing(self):
-        for text in ("How do I request a refill of my blood pressure medication?",
-                     "What is the policy for a refill for my inhaler?"):
-            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
-            self.assertEqual([p["agent"] for p in plan], ["retrieval"])
-
-    def test_refill_questions_without_markers_stay_on_retrieval(self):
-        for text in ("When can I refill my Metformin?", "Can I refill my prescription early?"):
-            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
-            self.assertEqual([p["agent"] for p in plan], ["retrieval"])
-
-    def test_mid_sentence_and_other_question_forms_stay_on_retrieval(self):
-        for text in ("I want to know how to refill my Metformin", "Explain the process to refill my Metformin",
-                     "Do I need a refill for my inhaler?", "Where do I refill my prescription?",
-                     "Should I refill my Metformin?"):
-            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
-            self.assertEqual([p["agent"] for p in plan], ["retrieval"], text)
-
-    def test_polite_refill_request_routes_to_task_agent(self):
-        for text in ("Can you refill my Metformin?", "Could you refill my inhaler please?"):
-            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
-            self.assertEqual([p["agent"] for p in plan], ["task"], text)
-
     def test_multi_intent_staged_reply_keeps_verified_retrieval_answer(self):
         task = {"reply": "free text", "staged": True}
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
-            out = self.flow("What are the visiting hours? Also refill my Metformin")
+            out = self.flow("What are the visiting hours? Also reschedule my appointment")
         self.assertEqual(out["draft_response"], "Approved Riverside Health information:\n" + PASSAGES
-                         + "\n\n" + supervisor_agent.STAGED_NOTICE)
+                         + "\n\n" + supervisor_agent.STAGED_NOTICE + " " + supervisor_agent.OTHER_REQUEST_NOTICE)
         self.assertEqual((out["staged"], out["citations"]), (True, ["s3://docs/approved/visiting.md"]))
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
-            out = self.flow("What are the visiting hours? Also refill my Metformin", status="FAIL")
+            out = self.flow("What are the visiting hours? Also reschedule my appointment", status="FAIL")
         self.assertTrue(out["draft_response"].startswith(supervisor_agent.STAGED_NOTICE))
         self.assertIn(ESCALATION_NOTICE, out["draft_response"])
         self.assertEqual((out["staged"], out["citations"]), (True, []))
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
-            out = self.flow("Please reschedule my appointment and refill my Metformin")
+            out = self.flow("Please reschedule my appointment")
         self.assertIn(supervisor_agent.STAGED_NOTICE, out["draft_response"])
         self.assertNotIn("free text", out["draft_response"])
         self.assertIn(supervisor_agent.OTHER_REQUEST_NOTICE, out["draft_response"])
@@ -99,18 +76,14 @@ class DeployableSupervisorTest(unittest.TestCase):
         task = {"reply": "free text", "staged": True}
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task), \
                 mock.patch.object(supervisor_agent, "verify_response", side_effect=supervisor_agent.BudgetExceeded("x")):
-            out = self.flow("What are the visiting hours? Also refill my Metformin")
-        self.assertEqual((out["draft_response"], out["staged"]), (supervisor_agent.STAGED_NOTICE, True))
+            out = self.flow("What are the visiting hours? Also reschedule my appointment")
+        self.assertEqual((out["draft_response"], out["staged"]), (f"{supervisor_agent.STAGED_NOTICE} {BUDGET_MESSAGE} {supervisor_agent.OTHER_REQUEST_NOTICE}", True))
 
-    def test_multi_intent_refill_keeps_retrieval_and_task(self):
-        plan = supervisor_agent.create_plan("What are the visiting hours? Also refill my Metformin",
-                                            {"clinical_detected": False}, mock.MagicMock())
-        self.assertEqual([p["agent"] for p in plan], ["retrieval", "task"])
-
-    def test_refill_action_routes_to_task_agent(self):
-        for text in ("Please refill my Metformin", "Refill my inhaler please", "I need a refill of Metformin"):
-            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
-            self.assertEqual([p["agent"] for p in plan], ["task"])
+    def test_refill_requests_are_never_routed_to_the_task_agent(self):
+        for text in ("Please refill my Metformin", "Can you refill my inhaler?", "How do I refill my inhaler?"):
+            with mock.patch.object(supervisor_agent, "run_task_tool") as task:
+                self.flow(text)
+            task.assert_not_called()
 
     def test_api_result_carries_staged(self):
         base = {"decision": "allow", "draft_response": "ok"}

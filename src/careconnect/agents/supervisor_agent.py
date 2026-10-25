@@ -44,7 +44,7 @@ from careconnect.budget import (
 )
 from careconnect.gateway import StagedRefillToolReply
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
@@ -79,22 +79,6 @@ INFORMATIONAL_KEYWORDS = [
     "appointment", "book", "hours",
 ]
 OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
-REFILL_QUESTION_MARKERS = ["how do i", "how to", "policy", "process"]
-# "can/could/will/would you ..." is a polite request, not a question.
-QUESTION_START = re.compile(
-    r"^\W*(?:when|what|how|is|are|do|does|did|where|should|why|who|which|may"
-    r"|(?:can|could|will|would)(?!\s+you\b))\b"
-)
-
-
-def is_refill_question(clause):
-    return bool(QUESTION_START.match(clause)) or any(m in clause for m in REFILL_QUESTION_MARKERS)
-
-
-def is_refill_action(lowered):
-    """An explicit refill request in some clause that is not a question."""
-    clauses = re.split(r"[?.!]", lowered)
-    return any(REFILL_REQUEST.search(c) and not is_refill_question(c) for c in clauses)
 
 
 def create_plan(request, safety, state):
@@ -103,12 +87,8 @@ def create_plan(request, safety, state):
     plan = []
     if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
-    refill = is_refill_action(lowered)
-    without_refill = REFILL_REQUEST.sub("", lowered) if refill else lowered  # the refill action is not an info lookup
-    if any(k in without_refill for k in INFORMATIONAL_KEYWORDS):
+    if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
-    if refill:
-        plan.append({"task": "Stage refill request", "agent": "task"})
     if any(k in lowered for k in OPERATIONAL_KEYWORDS):
         plan.append({"task": "Check operational status", "agent": "task"})
     if not plan:
@@ -150,26 +130,25 @@ def tool_short_name(name):
 
 def refill_was_staged(messages):
     """True only if a stage_refill_request tool call returned awaiting_approval, not submitted."""
+    blocks = [b for m in messages if isinstance(m, dict) for b in m.get("content", []) if isinstance(b, dict)]
     staging_calls = {
-        block["toolUse"]["toolUseId"]
-        for m in messages for block in m.get("content", [])
-        if isinstance(block, dict) and block.get("toolUse", {}).get("toolUseId")
-        and tool_short_name(block.get("toolUse", {}).get("name", "")) == "stage_refill_request"
+        use["toolUseId"] for use in (b.get("toolUse") for b in blocks)
+        if isinstance(use, dict) and use.get("toolUseId")
+        and tool_short_name(use.get("name", "")) == "stage_refill_request"
     }
-    for m in messages:
-        for block in m.get("content", []):
-            result = block.get("toolResult") if isinstance(block, dict) else None
-            if not result or result.get("toolUseId") not in staging_calls or result.get("status") == "error":
+    for block in blocks:
+        result = block.get("toolResult")
+        if not isinstance(result, dict) or result.get("toolUseId") not in staging_calls or result.get("status") == "error":
+            continue
+        for part in result.get("content", []):
+            try:
+                if "json" in part:
+                    StagedRefillToolReply.model_validate(part["json"], strict=True)
+                else:
+                    StagedRefillToolReply.model_validate_json(part["text"], strict=True)
+            except (ValidationError, KeyError, TypeError):
                 continue
-            for part in result.get("content", []):
-                try:
-                    if "json" in part:
-                        StagedRefillToolReply.model_validate(part["json"], strict=True)
-                    else:
-                        StagedRefillToolReply.model_validate_json(part["text"], strict=True)
-                except (ValidationError, KeyError, TypeError):
-                    continue
-                return True
+            return True
     return False
 
 
@@ -328,7 +307,7 @@ def staged_reply(request, results, evidence, state):
             else:
                 reply += " " + escalation_notice(request)  # opens the ticket, as on the normal path
         except Exception:  # includes BudgetExceeded
-            reply, citations = STAGED_NOTICE, []
+            reply, citations = STAGED_NOTICE + " " + BUDGET_MESSAGE, []
     if any(k in request.lower() for k in OPERATIONAL_KEYWORDS):
         reply += " " + OTHER_REQUEST_NOTICE
     return {"decision": "allow", "draft_response": reply, "staged": True, "citations": citations}
