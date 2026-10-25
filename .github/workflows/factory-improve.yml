@@ -49,7 +49,12 @@ jobs:
           Find at most 3 durable lessons: a rule the reviewer applied that humans overruled (move to 'Never flag'), a problem humans caught that the reviewer missed, a mistake reviewers keep rejecting in builders' first attempts (add to 'Always flag' or 'Repo-specific gotchas'). Ignore one-off disagreements.
           Edit REVIEW.md in place. Keep it under 120 lines. If there is nothing durable, change nothing.
 
-          $(cat /tmp/threads.md)" --allowedTools "Read,Edit,Write" --max-turns 15 || true
+          $(cat /tmp/threads.md)" --allowedTools "Read,Edit" --max-turns 15 || true
+      - name: Check the step changed only REVIEW.md
+        run: |
+          OTHER="$(git status --porcelain | grep -v '^ M REVIEW\.md$' || true)"
+          [ -z "$OTHER" ] || { echo "unexpected changes:"; echo "$OTHER"; exit 1; }
+          [ "$(wc -l < REVIEW.md)" -le 120 ] || { echo "REVIEW.md is over 120 lines"; exit 1; }
       - name: Open PR if REVIEW.md changed
         env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
         run: |
