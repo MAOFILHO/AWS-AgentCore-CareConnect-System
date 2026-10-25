@@ -29,6 +29,11 @@ const isAllowed = (file) => !file.includes("..") && ALLOWED.some((re) => re.test
 
 const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.startsWith(p) : file === p));
 
+// A protected-path blocker whose only fix is "human review required" never clears: a human merges those PRs anyway.
+// The fix must be that phrase alone (any case, optional trailing period), the one .sandcastle/security-prompt.md tells the reviewer to write; keep them in sync.
+export const isHumanGate = (finding) =>
+  finding.severity === "blocker" && isProtected(finding.file) && /^\s*human review required\.?\s*$/i.test(finding.fix);
+
 export function decide({ enabled, crossRepository, branch, draft, labels, checks, files, changedFiles }) {
   if (!enabled) return { merge: false, reason: "auto-merge is switched off" };
   if (crossRepository) return { merge: false, reason: "PR comes from a fork" };
