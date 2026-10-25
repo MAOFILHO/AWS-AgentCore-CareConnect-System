@@ -6,6 +6,8 @@ import {
 } from "../src/frontend/chat.js";
 
 const ESCALATION_NOTICE = "A licensed clinician will follow up with you.";
+const ESCALATE = "Sent to a clinician for review.";
+const STOPPED = "We could not answer this. Please contact the hospital.";
 const apiUrl = "https://api.test/careconnect";
 const fakeApi = (status, body) => async () => ({ ok: status < 400, status, json: async () => body });
 
@@ -29,12 +31,12 @@ test("a reply shows its text and citation names", async () => {
 
 test("an escalation shows the server's notice and no citations", async () => {
   const fetch = fakeApi(200, { decision: "escalate", reply: ESCALATION_NOTICE, citations: ["a.md"] });
-  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: ESCALATION_NOTICE, citations: [] });
+  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: ESCALATION_NOTICE, citations: [], status: ESCALATE });
 });
 
 test("a block shows the server's reply and no citations", async () => {
   const fetch = fakeApi(200, { decision: "block", reply: "The assistant cannot help with that.", citations: ["a.md"] });
-  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: "The assistant cannot help with that.", citations: [] });
+  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: "The assistant cannot help with that.", citations: [], status: STOPPED });
 });
 
 test("an API error shows one fixed message with no error text", async () => {
@@ -74,13 +76,13 @@ const FAILED_ESCALATION = "We could not pass your request to a clinician. Please
 
 test("a failed escalation shows the server's call-us reply, not a promise", async () => {
   const fetch = fakeApi(200, { decision: "escalate", reply: FAILED_ESCALATION, citations: [] });
-  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: FAILED_ESCALATION, citations: [] });
+  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: FAILED_ESCALATION, citations: [], status: ESCALATE });
 });
 
 test("a budget stop shows the server's reply", async () => {
   const reply = "This request is taking too long, so I stopped. Please try again or call us.";
   const fetch = fakeApi(200, { decision: "stop", reply, citations: [] });
-  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: reply, citations: [] });
+  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: reply, citations: [], status: STOPPED });
 });
 
 test("a malformed 200 body shows the error notice", async () => {
@@ -94,4 +96,26 @@ test("an answer without citations or with bad citations shows only valid names",
   const fetch = (citations) => fakeApi(200, { decision: "allow", reply: "No approved answer.", citations });
   assert.deepEqual(await ask("q", { apiUrl, fetch: fetch(undefined) }), { text: "No approved answer.", citations: [] });
   assert.deepEqual(await ask("q", { apiUrl, fetch: fetch(["a.md", 7, null]) }), { text: "No approved answer.", citations: ["a.md"] });
+});
+
+test("show() renders the status above the reply text with textContent", () => {
+  const doc = { createElement: el };
+  const box = el();
+  show(doc, box, { text: "<b>x</b>", citations: [], status: ESCALATE });
+  assert.equal(box.children.length, 2);
+  assert.equal(box.children[0].textContent, ESCALATE);
+  assert.equal(box.children[1].textContent, "<b>x</b>");
+  const plain = el();
+  show(doc, plain, { text: "ok", citations: [] });
+  assert.equal(plain.children.length, 1);
+});
+
+test("each of the 4 decisions gives the right status", async () => {
+  const expected = { allow: undefined, escalate: ESCALATE, block: STOPPED, stop: STOPPED };
+  for (const [decision, status] of Object.entries(expected)) {
+    const result = await ask("q", { apiUrl, fetch: fakeApi(200, { decision, reply: "r", citations: [] }) });
+    assert.equal(result.status, status, decision);
+    assert.equal("status" in result, status !== undefined, decision);
+  }
+  assert.equal("status" in await ask("q", { apiUrl, fetch: fakeApi(500, {}) }), false);
 });
