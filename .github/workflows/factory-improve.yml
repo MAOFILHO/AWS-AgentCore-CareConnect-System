@@ -62,4 +62,10 @@ jobs:
           B="factory/improve-$(date -u +%F)"
           git config user.name factory-improve; git config user.email factory@users.noreply.github.com
           git checkout -b "$B"; git add REVIEW.md; git commit -m "Reviewer learnings from $(date -u +%F)"; git push -u origin "$B"
-          gh pr create --title "Factory: reviewer learnings $(date -u +%F)" --body "Proposed by the improve loop from yesterday's review threads. Merge only if these are rules you want the reviewers to keep." --label factory-improve || true
+          PR="$(gh pr create --title "Factory: reviewer learnings $(date -u +%F)" --body "Proposed by the improve loop from yesterday's review threads. Merged by the workflow when it only adds rules that make the reviewers stricter." --label factory-improve)"
+          # Stricter-only rule: no removed line and no added line under "Never flag". Anything else waits for a human.
+          git diff -U0 origin/main -- REVIEW.md | awk '/^-[^-]/{bad=1} END{exit bad}' \
+            && ! git diff origin/main -- REVIEW.md | grep -q '^+.*Never flag' \
+            && [ "$(git show origin/main:REVIEW.md | awk '/^## Never flag/{f=1;next} /^## /{f=0} f' | md5sum)" = "$(awk '/^## Never flag/{f=1;next} /^## /{f=0} f' REVIEW.md | md5sum)" ] \
+            && gh pr merge "$PR" --merge \
+            || { gh label create needs-human --color b60205 2>/dev/null || true; gh pr edit "$PR" --add-label needs-human; }

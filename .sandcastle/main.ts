@@ -9,7 +9,9 @@
 //          each returning a typed verdict; the implementer fixes CHANGES
 //          up to 5 rounds, re-reviewing only the new diff
 //        branch is pushed and a PR opened (draft if a reviewer still objects)
-//   3. Merging is NOT done here. The factory-merge Action (allow-listed files only) or the owner (or an agent in an owner-started session) with merge.sh does that.
+//   3. Drive: each PR is watched until its checks finish. Green: merge.sh merges it. A failed review:
+//      the findings go onto the issue and the wave runs again (3 attempts, then needs-human).
+//      Merged work triggers another wave, so the queue empties without a human (FACTORY_MAX_WAVES, default 10).
 //
 // Everything repo-specific lives in AGENTS.md and the prompt files beside this one.
 // Run:  factory run     (or: npx tsx .sandcastle/main.ts)
@@ -20,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
 import { priorFindings } from "./prior-findings.js";
+import { nextStep, findingsComment } from "./drive-policy.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -286,4 +289,46 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
 // ---------------------------------------------------------------------------
 console.log("\nWave complete");
 for (const r of results) console.log(`  #${r.id}  ${r.state.padEnd(10)} ${r.pr ?? r.branch}`);
-console.log("\nNext: review the PRs, approve, merge. Run again when new 'factory' issues exist.");
+
+// ---------------------------------------------------------------------------
+// Phase 3: drive every PR to merge, or back to build, or stop at the attempt cap
+// ---------------------------------------------------------------------------
+const MAX_ATTEMPTS = Number(process.env.FACTORY_MAX_ATTEMPTS ?? 3);
+const WAIT_MS = 30_000;
+const MAX_WAIT_MS = 20 * 60_000;
+let again = false;
+for (const r of results.filter((x) => x.pr)) {
+  const pr = r.pr!.split("/").pop()!;
+  const attempts = () =>
+    (JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")) as { body?: string }[]).filter((c) =>
+      (c.body ?? "").startsWith("Factory: review round")).length + 1;
+  for (let waited = 0; ; waited += WAIT_MS) {
+    const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments"));
+    const checks = JSON.parse(execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }).trim() || "[]");
+    const step = nextStep({
+      checks, attempts: attempts(), maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
+      needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
+    });
+    if (step.action === "wait" && waited < MAX_WAIT_MS) { await new Promise((ok) => setTimeout(ok, WAIT_MS)); continue; }
+    if (step.action === "merge") {
+      execFileSync("bash", [".sandcastle/merge.sh", pr], { stdio: "inherit" });
+      log(`#${r.id}`, `merged PR ${pr}`);
+      again = true;
+    } else if (step.action === "rebuild") {
+      const review = (view.comments as { body: string }[]).filter((c) => c.body.includes("<!-- factory-review -->")).at(-1)?.body ?? step.reason;
+      gh("issue", "comment", r.id, "--body", findingsComment(Number(pr), r.branch, `${step.reason}\n\n${review}`));
+      log(`#${r.id}`, `back to build: ${step.reason}`);
+      again = true;
+    } else {
+      gh("issue", "edit", r.id, "--add-label", "needs-human");
+      gh("pr", "edit", pr, "--add-label", "needs-human");
+      log(`#${r.id}`, `stopped: ${step.reason}`);
+    }
+    break;
+  }
+}
+const wave = Number(process.env.FACTORY_WAVE ?? 1);
+if (again && wave < Number(process.env.FACTORY_MAX_WAVES ?? 10)) {
+  execFileSync("git", ["pull", "--ff-only", "origin", "main"], { stdio: "inherit" });
+  execFileSync("npx", ["tsx", ".sandcastle/main.ts"], { stdio: "inherit", env: { ...process.env, FACTORY_WAVE: String(wave + 1) } });
+}

@@ -52,5 +52,5 @@ jobs:
           elif [[ "$reason" == "PR touches protected file"* || "$reason" == *" is not on the allow list" ]]; then
             gh label create protected-paths --color d93f0b --description "A human merges this PR" 2>/dev/null || true
             gh pr edit "$pr" --add-label protected-paths
-            gh pr comment "$pr" --body "Not auto-merged: \`$reason\`. The owner, or an agent in an owner-started session, merges it with \`bash .sandcastle/merge.sh $pr\`."
+            gh pr comment "$pr" --body "Not auto-merged: \`$reason\`. `factory run` merges it with \`bash .sandcastle/merge.sh $pr\`."
           fi
