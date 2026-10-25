@@ -1,4 +1,7 @@
 export const ERROR_NOTICE = "Something went wrong. Please try again.";
+const ESCALATE_STATUS = "Sent to a clinician for review.";
+const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
+const STATUS = { escalate: ESCALATE_STATUS, block: STOPPED_STATUS, stop: STOPPED_STATUS };
 
 // Turn the API reply into what the page shows. Anything unexpected is the fixed error.
 export async function ask(question, { apiUrl, fetch }) {
@@ -10,8 +13,8 @@ export async function ask(question, { apiUrl, fetch }) {
     });
     if (!res.ok) return { text: ERROR_NOTICE, citations: [] };
     const body = await res.json();
-    if (["escalate", "block", "stop"].includes(body.decision) && typeof body.reply === "string") {
-      return { text: body.reply, citations: [] };
+    if (typeof body.decision === "string" && Object.hasOwn(STATUS, body.decision) &&typeof body.reply === "string") {
+      return { text: body.reply, citations: [], status: STATUS[body.decision] };
     }
     if (body.decision === "allow" && typeof body.reply === "string") {
       const citations = Array.isArray(body.citations) ? body.citations.filter((c) => typeof c === "string") : [];
@@ -24,8 +27,13 @@ export async function ask(question, { apiUrl, fetch }) {
 }
 
 // Show a result with textContent only, so reply text is never parsed as HTML.
-export function show(doc, container, { text, citations }) {
+export function show(doc, container, { text, citations, status }) {
   container.textContent = "";
+  if (status) {
+    const s = doc.createElement("p");
+    s.textContent = status;
+    container.appendChild(s);
+  }
   const p = doc.createElement("p");
   p.textContent = text;
   container.appendChild(p);
