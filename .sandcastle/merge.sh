@@ -6,9 +6,9 @@ set -euo pipefail
 pr="${1:-}"
 [ -n "$pr" ] || { echo "Usage: bash .sandcastle/merge.sh <pr-number>" >&2; exit 1; }
 
-info="$(gh pr view "$pr" --json headRefName,isDraft,labels \
-  -q '[.headRefName, .isDraft, ([.labels[].name] | index("needs-human") != null)] | @tsv')"
-IFS=$'\t' read -r head draft needs_human <<<"$info"
+info="$(gh pr view "$pr" --json headRefName,isDraft,labels,headRefOid \
+  -q '[.headRefName, .isDraft, ([.labels[].name] | index("needs-human") != null), .headRefOid] | @tsv')"
+IFS=$'\t' read -r head draft needs_human sha <<<"$info"
 
 case "$head" in
   sandcastle/*) ;;
@@ -29,5 +29,6 @@ if [ -z "$checks" ] || [ -n "$bad" ]; then
   exit 1
 fi
 
-gh pr merge "$pr" --merge
+# Refuses the merge if the branch moved since the checks were read.
+gh pr merge "$pr" --merge --match-head-commit "$sha"
 echo "merged PR #$pr"
