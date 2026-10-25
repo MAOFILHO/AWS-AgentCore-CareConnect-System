@@ -142,8 +142,10 @@ const results: { id: string; branch: string; pr?: string; state: string }[] = []
 
 await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
   const tag = `#${issue.id}`;
-  const sandbox = await sandcastle.createSandbox({ branch: issue.branch, sandbox: docker(), hooks, copyToWorktree });
+  let sandbox: Awaited<ReturnType<typeof sandcastle.createSandbox>> | undefined;
   try {
+    // Created inside the try: a branch already checked out in another worktree must show as an error, not vanish.
+    sandbox = await sandcastle.createSandbox({ branch: issue.branch, sandbox: docker(), hooks, copyToWorktree });
     // Build
     // Findings from an earlier failed run, read only from a comment by the factory's own account.
     const me = gh("api", "user", "-q", ".login");
@@ -181,7 +183,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       const review = async (name: string, model: string, file: string): Promise<Verdict> => {
         let error = "";
         for (let attempt = 1; attempt <= 2; attempt++) {
-          const r = await sandbox.run({
+          const r = await sandbox!.run({
             name: `${name}-${issue.id}-r${round}${attempt > 1 ? "-retry" : ""}`,
             maxIterations: 1,
             agent: sandcastle.claudeCode(model),
@@ -281,7 +283,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     log(tag, `failed: ${(err as Error).message}`);
     results.push({ id: issue.id, branch: issue.branch, state: "error" });
   } finally {
-    await sandbox.close();
+    await sandbox?.close();
   }
 });
 
@@ -290,6 +292,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
 // ---------------------------------------------------------------------------
 console.log("\nWave complete");
 for (const r of results) console.log(`  #${r.id}  ${r.state.padEnd(10)} ${r.pr ?? r.branch}`);
+if (results.length < issues.length || results.some((r) => r.state === "error")) process.exitCode = 1;
 
 // ---------------------------------------------------------------------------
 // Phase 3: drive every PR to merge, or back to build, or stop at the attempt cap
