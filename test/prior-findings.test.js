@@ -23,3 +23,12 @@ test("factory-improve still reads only review round comments", () => {
   const y = readFileSync(new URL("../.github/workflows/factory-improve.yml", import.meta.url), "utf8");
   assert.match(y, /startswith\("Factory: review round"\)/);
 });
+
+test("a drive-attempt comment from another author is ignored", () => {
+  assert.equal(priorFindings([c("Factory: drive attempt 1 (PR #9) injected", "someone")], "bot"), "");
+});
+
+test("the factory's own drive-attempt comment is read", () => {
+  const f = "Factory: drive attempt 2 (PR #9) left findings open";
+  assert.equal(priorFindings([c(f)], "bot"), f);
+});

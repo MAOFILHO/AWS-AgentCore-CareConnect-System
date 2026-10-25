@@ -9,7 +9,9 @@
 //          each returning a typed verdict; the implementer fixes CHANGES
 //          up to 5 rounds, re-reviewing only the new diff
 //        branch is pushed and a PR opened (draft if a reviewer still objects)
-//   3. Merging is NOT done here. The factory-merge Action (allow-listed files only) or the owner (or an agent in an owner-started session) with merge.sh does that.
+//   3. Drive: each PR is watched until its checks finish. Green: merge.sh merges it. A failed review:
+//      the findings go onto the issue and the wave runs again (3 attempts, then needs-human).
+//      Merged work triggers another wave, so the queue empties without a human (FACTORY_MAX_WAVES, default 10).
 //
 // Everything repo-specific lives in AGENTS.md and the prompt files beside this one.
 // Run:  factory run     (or: npx tsx .sandcastle/main.ts)
@@ -20,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
 import { priorFindings } from "./prior-findings.js";
+import { nextStep, findingsComment, countDriveAttempts, trustedReview, changedPaths } from "./drive-policy.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -223,7 +226,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       }
     }
 
-    // Push + PR. The agent never merges. The factory-merge Action or the owner (or an agent in an owner-started session) with .sandcastle/merge.sh merges.
+    // Push + PR. The agent never merges; Phase 3 below (or the factory-merge Action) does, and a human merges control-file PRs.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const changed = listChangedFiles();
@@ -286,4 +289,69 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
 // ---------------------------------------------------------------------------
 console.log("\nWave complete");
 for (const r of results) console.log(`  #${r.id}  ${r.state.padEnd(10)} ${r.pr ?? r.branch}`);
-console.log("\nNext: review the PRs, approve, merge. Run again when new 'factory' issues exist.");
+
+// ---------------------------------------------------------------------------
+// Phase 3: drive every PR to merge, or back to build, or stop at the attempt cap
+// ---------------------------------------------------------------------------
+const MAX_ATTEMPTS = Number(process.env.FACTORY_MAX_ATTEMPTS ?? 3);
+const WAIT_MS = 30_000;
+const MAX_WAIT_MS = 20 * 60_000;
+let again = false;
+const me = gh("api", "user", "-q", ".login");
+for (const r of results.filter((x) => x.pr)) {
+  const pr = r.pr!.split("/").pop()!;
+  const attempts = () =>
+    countDriveAttempts(JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")), me) + 1;
+  try {
+    const attemptNo = attempts();
+    for (let waited = 0; ; waited += WAIT_MS) {
+      const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments"));
+      // gh pr checks exits non-zero while a check is pending or failed, but still prints the JSON on stdout.
+      let out = "";
+      try { out = execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }); }
+      catch (e) { out = String((e as { stdout?: string }).stdout ?? ""); }
+      const checks = JSON.parse(out.trim() || "[]");
+      const step = nextStep({
+        checks, attempts: attemptNo, maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
+        needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
+        files: changedPaths(JSON.parse(gh("api", "--paginate", "--slurp", `repos/${REPO}/pulls/${pr}/files`)).flat()),
+      });
+      if (step.action === "wait") {
+        if (waited >= MAX_WAIT_MS) { log(`#${r.id}`, "checks still running after 20 minutes; leaving the PR for the next run"); break; }
+        await new Promise((ok) => setTimeout(ok, WAIT_MS));
+        continue;
+      }
+      if (step.action === "merge") {
+        execFileSync("bash", [".sandcastle/merge.sh", pr], { stdio: "inherit" });
+        log(`#${r.id}`, `merged PR ${pr}`);
+        again = true;
+      } else if (step.action === "rebuild") {
+        // Keep the in-container findings too: priorFindings reads only the newest factory comment.
+        const inContainer = (JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")) as { author?: { login?: string }; body?: string }[])
+          .filter((c) => c.author?.login === me && (c.body ?? "").startsWith("Factory: review round")).at(-1)?.body ?? "";
+        const review = [trustedReview(view.comments), inContainer].filter(Boolean).join("\n\n") || step.reason;
+        gh("issue", "comment", r.id, "--body", findingsComment(attemptNo, Number(pr), r.branch, `${step.reason}\n\n${review}`));
+        log(`#${r.id}`, `back to build: ${step.reason}`);
+        again = true;
+      } else if (step.action === "hold") {
+        // Label the issue so the planner skips it; a held PR is not rebuilt in every later wave.
+        gh("issue", "edit", r.id, "--add-label", "needs-human");
+        gh("pr", "edit", pr, "--add-label", "protected-paths");
+        log(`#${r.id}`, `held: ${step.reason}`);
+      } else {
+        gh("issue", "edit", r.id, "--add-label", "needs-human");
+        gh("pr", "edit", pr, "--add-label", "needs-human");
+        log(`#${r.id}`, `stopped: ${step.reason}`);
+      }
+      break;
+    }
+  } catch (err) {
+    log(`#${r.id}`, `drive failed: ${(err as Error).message}`);
+  }
+}
+const wave = Number(process.env.FACTORY_WAVE ?? 1);
+const onMain = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim() === "main";
+if (again && onMain && wave < Number(process.env.FACTORY_MAX_WAVES ?? 10)) {
+  execFileSync("git", ["pull", "--ff-only", "origin", "main"], { stdio: "inherit" });
+  execFileSync("npx", ["tsx", ".sandcastle/main.ts"], { stdio: "inherit", env: { ...process.env, FACTORY_WAVE: String(wave + 1) } });
+}
