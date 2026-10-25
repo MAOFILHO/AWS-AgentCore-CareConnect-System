@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextStep, findingsComment, countDriveAttempts, touchesControl, trustedReview, changedPaths } from "../.sandcastle/drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts, touchesControl, trustedReview, changedPaths, assertIndependentReviewers } from "../.sandcastle/drive-policy.js";
 import { REQUIRED_CHECKS as REQ } from "../.sandcastle/auto-merge.js";
 const all = (bucket) => REQ.map((name) => ({ name, bucket }));
 const base = { checks: all("pass"), attempts: 1, maxAttempts: 3, draft: false, needsHuman: false, files: ["src/careconnect/safety_gate.py"] };
@@ -81,4 +81,10 @@ test("a non-required check still running makes the PR wait", () => {
 test("approved documents and infra always wait for a human", () => {
   assert.equal(touchesControl(["infra/main.tf"]), true);
   assert.equal(touchesControl(["Docs/Repo/careconnect-approved-docs/refills.md"]), true);
+});
+
+test("reviewers must use a different model than the builder", () => {
+  assert.throws(() => assertIndependentReviewers("sonnet", "sonnet", "opus"), /reviewer/);
+  assert.throws(() => assertIndependentReviewers("sonnet", "opus", "sonnet"), /security/);
+  assert.doesNotThrow(() => assertIndependentReviewers("sonnet", "opus", "opus"));
 });
