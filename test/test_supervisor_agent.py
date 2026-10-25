@@ -60,6 +60,16 @@ class DeployableSupervisorTest(unittest.TestCase):
             plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
             self.assertEqual([p["agent"] for p in plan], ["retrieval"])
 
+    def test_refill_questions_without_markers_stay_on_retrieval(self):
+        for text in ("When can I refill my Metformin?", "Can I refill my prescription early?"):
+            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
+            self.assertEqual([p["agent"] for p in plan], ["retrieval"])
+
+    def test_multi_intent_refill_keeps_retrieval_and_task(self):
+        plan = supervisor_agent.create_plan("What are the visiting hours? Also refill my Metformin",
+                                            {"clinical_detected": False}, mock.MagicMock())
+        self.assertEqual([p["agent"] for p in plan], ["retrieval", "task"])
+
     def test_refill_action_routes_to_task_agent(self):
         for text in ("Please refill my Metformin", "Refill my inhaler please", "I need a refill of Metformin"):
             plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())

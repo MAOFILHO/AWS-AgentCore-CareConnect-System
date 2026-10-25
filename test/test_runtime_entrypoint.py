@@ -48,7 +48,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
         out = self.invoke("visiting hours", budgets=Budgets(max_steps=1, max_cost_usd=0.05, max_seconds=30))
         self.assertEqual((out["decision"], out["reply"]), ("stop", BUDGET_MESSAGE))
 
-    def run_task_flow(self, messages):
+    def run_task_flow(self, messages, prompt="Please refill my Metformin"):
         task = types.SimpleNamespace(SYSTEM_PROMPT="p", get_mcp_client=FakeMcpClient)
         strands = types.SimpleNamespace(Agent=lambda **kw: FakeTaskAgent(messages))
         real = supervisor_agent.supervisor_flow
@@ -58,7 +58,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
                 mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
                 mock.patch.object(runtime_entrypoint, "supervisor_flow", flow), \
                 mock.patch.dict("os.environ", {"CARECONNECT_GATEWAY_URL": "gw"}):
-            return runtime_entrypoint.invoke({"prompt": "Please refill my Metformin"})
+            return runtime_entrypoint.invoke({"prompt": prompt})
 
     def staging_messages(self, content):
         return [
@@ -74,6 +74,10 @@ class RuntimeEntrypointTest(unittest.TestCase):
                 out = self.run_task_flow(self.staging_messages(content))
                 self.assertEqual((out["decision"], out["staged"]), ("allow", True))
                 self.assertNotIn("Metformin", str(out))
+        with self.subTest(prompt="multi-intent"):
+            out = self.run_task_flow(self.staging_messages({"json": staged}),
+                                     "Please reschedule my appointment and refill my Metformin")
+            self.assertEqual((out["decision"], out["staged"]), ("allow", True))
 
     def test_refill_that_is_not_staged_leaves_staged_false(self):
         submitted = {"drug": "Metformin", "status": "awaiting_approval", "idempotency_key": "k", "submitted": True}

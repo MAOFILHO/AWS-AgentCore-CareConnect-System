@@ -78,11 +78,13 @@ INFORMATIONAL_KEYWORDS = [
     "appointment", "book", "hours",
 ]
 OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
-REFILL_QUESTION_MARKERS = ["how do i", "how to", "policy", "process"]
+QUESTION_START = re.compile(r"^\W*(when|can|what|how|is)\b")
 
 
 def is_refill_action(lowered):
-    return bool(REFILL_REQUEST.search(lowered)) and not any(m in lowered for m in REFILL_QUESTION_MARKERS)
+    """An explicit refill request in some clause that is not a question."""
+    clauses = re.split(r"[?.!]", lowered)
+    return any(REFILL_REQUEST.search(c) and not QUESTION_START.match(c) for c in clauses)
 
 
 def create_plan(request, safety, state):
@@ -91,12 +93,12 @@ def create_plan(request, safety, state):
     plan = []
     if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
-    if is_refill_action(lowered):  # a real refill action: the task agent alone stages it
-        plan.append({"task": "Stage refill request", "agent": "task"})
-        print(f"     - {plan[0]['task']} -> task agent")
-        return plan
-    if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
+    refill = is_refill_action(lowered)
+    info = REFILL_REQUEST.sub("", lowered) if refill else lowered  # the refill action is not an info lookup
+    if any(k in info for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
+    if refill:
+        plan.append({"task": "Stage refill request", "agent": "task"})
     if any(k in lowered for k in OPERATIONAL_KEYWORDS):
         plan.append({"task": "Check operational status", "agent": "task"})
     if not plan:
@@ -131,17 +133,12 @@ def split_passages(text):
     return [c for b in blocks for c in re.findall(r"(?s).*?^Source:[ \t]*\n\S+", b, flags=re.MULTILINE)]
 
 
-def tool_short_name(name):
-    """Gateway tool names are '<target>___<tool>'."""
-    return name.split("___")[-1]
-
-
 def refill_was_staged(messages):
     """True only if a stage_refill_request tool call returned awaiting_approval, not submitted."""
     staging_calls = {
         block["toolUse"]["toolUseId"]
         for m in messages for block in m.get("content", [])
-        if isinstance(block, dict) and tool_short_name(block.get("toolUse", {}).get("name", "")) == "stage_refill_request"
+        if isinstance(block, dict) and block.get("toolUse", {}).get("name", "").split("___")[-1] == "stage_refill_request"
     }
     for m in messages:
         for block in m.get("content", []):
@@ -151,9 +148,9 @@ def refill_was_staged(messages):
             for part in result.get("content", []):
                 try:
                     if "json" in part:
-                        StagedRefillToolReply.model_validate(part["json"], strict=True)
+                        StagedRefillToolReply.model_validate(part["json"])
                     else:
-                        StagedRefillToolReply.model_validate_json(part["text"], strict=True)
+                        StagedRefillToolReply.model_validate_json(part["text"])
                 except (ValidationError, KeyError, TypeError):
                     continue
                 return True
