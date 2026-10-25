@@ -77,13 +77,20 @@ class DeployableSupervisorTest(unittest.TestCase):
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task), \
                 mock.patch.object(supervisor_agent, "verify_response", side_effect=supervisor_agent.BudgetExceeded("x")):
             out = self.flow("What are the visiting hours? Also reschedule my appointment")
-        self.assertEqual((out["draft_response"], out["staged"]), (f"{supervisor_agent.STAGED_NOTICE} {BUDGET_MESSAGE} {supervisor_agent.OTHER_REQUEST_NOTICE}", True))
+        self.assertEqual((out["draft_response"], out["staged"]), (f"{supervisor_agent.STAGED_NOTICE} {supervisor_agent.UNANSWERED_NOTICE} {supervisor_agent.OTHER_REQUEST_NOTICE}", True))
 
-    def test_refill_requests_are_never_routed_to_the_task_agent(self):
-        for text in ("Please refill my Metformin", "Can you refill my inhaler?", "How do I refill my inhaler?"):
-            with mock.patch.object(supervisor_agent, "run_task_tool") as task:
-                self.flow(text)
-            task.assert_not_called()
+    def test_explicit_refill_requests_go_to_the_task_agent(self):
+        task = {"reply": "free text", "staged": True}
+        for text in ("Please refill my Metformin", "Can you refill my inhaler?"):
+            with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task) as run:
+                out = self.flow(text)
+            run.assert_called_once()
+            self.assertTrue(out["staged"])
+
+    def test_refill_questions_stay_on_retrieval(self):
+        with mock.patch.object(supervisor_agent, "run_task_tool") as run:
+            self.flow("How do I refill my inhaler?")
+        run.assert_not_called()
 
     def test_api_result_carries_staged(self):
         base = {"decision": "allow", "draft_response": "ok"}

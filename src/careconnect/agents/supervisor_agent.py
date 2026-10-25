@@ -44,12 +44,13 @@ from careconnect.budget import (
 )
 from careconnect.gateway import StagedRefillToolReply
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
 STAGED_NOTICE = "Your refill is staged and awaits human approval. It has not been submitted."
 OTHER_REQUEST_NOTICE = "Please ask separately about your other request."
+UNANSWERED_NOTICE = "I ran out of time to answer your other question; please ask it again."
 log = logging.getLogger(__name__)
 
 
@@ -79,6 +80,12 @@ INFORMATIONAL_KEYWORDS = [
     "appointment", "book", "hours",
 ]
 OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
+QUESTION_WORDS = ("how", "what", "when", "where", "why", "which", "who")
+
+
+def is_refill_request(request):
+    """An explicit 'refill my X' request, not a question about the refill process."""
+    return bool(REFILL_REQUEST.search(request)) and not request.lower().lstrip().startswith(QUESTION_WORDS)
 
 
 def create_plan(request, safety, state):
@@ -89,7 +96,7 @@ def create_plan(request, safety, state):
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
     if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
-    if any(k in lowered for k in OPERATIONAL_KEYWORDS):
+    if any(k in lowered for k in OPERATIONAL_KEYWORDS) or is_refill_request(request):
         plan.append({"task": "Check operational status", "agent": "task"})
     if not plan:
         plan.append({"task": "General approved-information lookup", "agent": "retrieval"})
@@ -306,8 +313,10 @@ def staged_reply(request, results, evidence, state):
                 reply, citations = info + "\n\n" + STAGED_NOTICE, sources
             else:
                 reply += " " + escalation_notice(request)  # opens the ticket, as on the normal path
-        except Exception:  # includes BudgetExceeded
-            reply, citations = STAGED_NOTICE + " " + BUDGET_MESSAGE, []
+        except BudgetExceeded:
+            reply, citations = STAGED_NOTICE + " " + UNANSWERED_NOTICE, []
+        except Exception:
+            reply, citations = STAGED_NOTICE + " " + escalation_notice(request), []
     if any(k in request.lower() for k in OPERATIONAL_KEYWORDS):
         reply += " " + OTHER_REQUEST_NOTICE
     return {"decision": "allow", "draft_response": reply, "staged": True, "citations": citations}
