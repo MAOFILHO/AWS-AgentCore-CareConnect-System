@@ -77,12 +77,19 @@ test("it never merges a PR with more than 100 changed files", () => {
 
 test("isHumanGate is true only for a protected-path blocker that asks for human review", () => {
   const gate = { severity: "blocker", file: ".github/workflows/x.yml", fix: "Human review required" };
-  assert.equal(isHumanGate(gate), true);
-  assert.equal(isHumanGate({ ...gate, severity: "major" }), false);
-  assert.equal(isHumanGate({ ...gate, file: "src/careconnect/agents/supervisor_agent.py", fix: "validate the input" }), false);
-  assert.equal(isHumanGate({ ...gate, file: "src/frontend/chat.js" }), false);
-  assert.equal(isHumanGate({ ...gate, fix: "human review required." }), true);
-  assert.equal(isHumanGate({ ...gate, fix: "Sanitize X; human review required" }), false);
+  const changed = [gate.file, "src/frontend/chat.js", "src/careconnect/agents/supervisor_agent.py"];
+  assert.equal(isHumanGate(gate, changed), true);
+  assert.equal(isHumanGate({ ...gate, severity: "major" }, changed), false);
+  assert.equal(isHumanGate({ ...gate, file: "src/careconnect/agents/supervisor_agent.py", fix: "validate the input" }, changed), false);
+  assert.equal(isHumanGate({ ...gate, file: "src/frontend/chat.js" }, changed), false);
+  assert.equal(isHumanGate({ ...gate, fix: "human review required." }, changed), true);
+  assert.equal(isHumanGate({ ...gate, fix: "Sanitize X; human review required" }, changed), false);
+});
+
+test("isHumanGate is false when the PR did not change the file", () => {
+  const gate = { severity: "blocker", file: ".github/workflows/x.yml", fix: "human review required" };
+  assert.equal(isHumanGate(gate, ["src/frontend/chat.js"]), false);
+  assert.equal(isHumanGate(gate, []), false);
 });
 
 test("security-prompt.md still tells the reviewer to write the human-gate phrase", () => {
