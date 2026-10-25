@@ -49,6 +49,7 @@ from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
 STAGED_NOTICE = "Your refill is staged and awaits human approval. It has not been submitted."
+OTHER_REQUEST_NOTICE = "Please ask separately about your other request."
 log = logging.getLogger(__name__)
 
 
@@ -78,13 +79,22 @@ INFORMATIONAL_KEYWORDS = [
     "appointment", "book", "hours",
 ]
 OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
-QUESTION_START = re.compile(r"^\W*(when|can|what|how|is)\b")
+REFILL_QUESTION_MARKERS = ["how do i", "how to", "policy", "process"]
+# "can/could/will/would you ..." is a polite request, not a question.
+QUESTION_START = re.compile(
+    r"^\W*(?:when|what|how|is|are|do|does|did|where|should|why|who|which|may"
+    r"|(?:can|could|will|would)(?!\s+you\b))\b"
+)
+
+
+def is_refill_question(clause):
+    return bool(QUESTION_START.match(clause)) or any(m in clause for m in REFILL_QUESTION_MARKERS)
 
 
 def is_refill_action(lowered):
     """An explicit refill request in some clause that is not a question."""
     clauses = re.split(r"[?.!]", lowered)
-    return any(REFILL_REQUEST.search(c) and not QUESTION_START.match(c) for c in clauses)
+    return any(REFILL_REQUEST.search(c) and not is_refill_question(c) for c in clauses)
 
 
 def create_plan(request, safety, state):
@@ -94,8 +104,8 @@ def create_plan(request, safety, state):
     if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
     refill = is_refill_action(lowered)
-    info = REFILL_REQUEST.sub("", lowered) if refill else lowered  # the refill action is not an info lookup
-    if any(k in info for k in INFORMATIONAL_KEYWORDS):
+    without_refill = REFILL_REQUEST.sub("", lowered) if refill else lowered  # the refill action is not an info lookup
+    if any(k in without_refill for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
     if refill:
         plan.append({"task": "Stage refill request", "agent": "task"})
@@ -133,12 +143,17 @@ def split_passages(text):
     return [c for b in blocks for c in re.findall(r"(?s).*?^Source:[ \t]*\n\S+", b, flags=re.MULTILINE)]
 
 
+def tool_short_name(name):
+    """Gateway tool names are '<target>___<tool>'."""
+    return name.split("___")[-1]
+
+
 def refill_was_staged(messages):
     """True only if a stage_refill_request tool call returned awaiting_approval, not submitted."""
     staging_calls = {
         block["toolUse"]["toolUseId"]
         for m in messages for block in m.get("content", [])
-        if isinstance(block, dict) and block.get("toolUse", {}).get("name", "").split("___")[-1] == "stage_refill_request"
+        if isinstance(block, dict) and tool_short_name(block.get("toolUse", {}).get("name", "")) == "stage_refill_request"
     }
     for m in messages:
         for block in m.get("content", []):
@@ -148,9 +163,9 @@ def refill_was_staged(messages):
             for part in result.get("content", []):
                 try:
                     if "json" in part:
-                        StagedRefillToolReply.model_validate(part["json"])
+                        StagedRefillToolReply.model_validate(part["json"], strict=True)
                     else:
-                        StagedRefillToolReply.model_validate_json(part["text"])
+                        StagedRefillToolReply.model_validate_json(part["text"], strict=True)
                 except (ValidationError, KeyError, TypeError):
                     continue
                 return True
@@ -279,8 +294,8 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         draft, evidence = combine_safe_results(results, safety, state)
         if safety["clinical_detected"]:
             return {**outcome, "decision": "escalate", "draft_response": draft}
-        if results.get("task", {}).get("staged"):  # fixed reply: never the model's free text
-            return {**outcome, "decision": "allow", "draft_response": STAGED_NOTICE, "staged": True}
+        if results.get("task", {}).get("staged"):  # fixed notice: never the model's free text
+            return {**outcome, **staged_reply(request, results, evidence, state)}
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
@@ -297,6 +312,19 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
                 "verification": verification}  # withhold the draft
     return {**outcome, "decision": "allow", "draft_response": draft, "verification": verification,
             "citations": citations}
+
+
+def staged_reply(request, results, evidence, state):
+    """STAGED_NOTICE, after the verified retrieval answer if the request had one."""
+    reply, citations = STAGED_NOTICE, []
+    if "retrieval" in results and evidence.strip():
+        info = "Approved Riverside Health information:\n" + evidence
+        sources = approved_sources(evidence)
+        if sources and verify_response(info, evidence, state).get("verification_status") == "PASS":
+            reply, citations = info + "\n\n" + STAGED_NOTICE, sources
+    if any(k in request.lower() for k in OPERATIONAL_KEYWORDS):
+        reply += " " + OTHER_REQUEST_NOTICE
+    return {"decision": "allow", "draft_response": reply, "staged": True, "citations": citations}
 
 
 def approved_sources(evidence):

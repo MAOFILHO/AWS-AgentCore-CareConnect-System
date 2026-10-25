@@ -78,6 +78,8 @@ class RuntimeEntrypointTest(unittest.TestCase):
             out = self.run_task_flow(self.staging_messages({"json": staged}),
                                      "Please reschedule my appointment and refill my Metformin")
             self.assertEqual((out["decision"], out["staged"]), ("allow", True))
+            self.assertIn(supervisor_agent.STAGED_NOTICE, out["reply"])
+            self.assertIn(supervisor_agent.OTHER_REQUEST_NOTICE, out["reply"])
 
     def test_refill_that_is_not_staged_leaves_staged_false(self):
         submitted = {"drug": "Metformin", "status": "awaiting_approval", "idempotency_key": "k", "submitted": True}
