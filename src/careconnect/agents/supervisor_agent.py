@@ -219,9 +219,14 @@ def escalation_notice(request):
 # Orchestrator — ties the five stages together.
 # ---------------------------------------------------------------------------
 def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
+    out = _supervisor_flow(request, cost_meter=cost_meter, budgets=budgets, clock=clock)
+    return {**out, "draft_response": mask_pii(out["draft_response"])}
+
+
+def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
     state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
     request_id = str(uuid.uuid4())
-    outcome = {"request_id": request_id, "request": request, "plan": [], "verification": {"verification_status": "n/a"}}
+    outcome = {"request_id": request_id, "request": mask_pii(request), "plan": [], "verification": {"verification_status": "n/a"}}
     try:
         safety = check_safety(request, state)
         outcome["safety"] = safety

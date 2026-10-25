@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from careconnect.budget import (
@@ -39,6 +40,15 @@ class SupervisorFlowTest(unittest.TestCase):
             )
             self.assertEqual(out["reply"], NO_ANSWER)
             self.assertEqual(out["citations"], [])
+
+    def test_reply_masks_email_phone_ssn_and_mrn(self):
+        leaked = {
+            "request_id": "r1", "citations": [], "escalation": None, "decision": "allow",
+            "reply": "Call 555-123-4567 or jo@example.com, SSN 123-45-6789, MRN-12345678.",
+        }
+        with mock.patch("careconnect.supervisor._flow", return_value=leaked):
+            out = self.flow("visiting hours")
+        self.assertEqual(out["reply"], "Call [PHONE] or [EMAIL], SSN [SSN], [MRN].")
 
     def test_dose_question_escalates(self):
         out = self.flow("should I double my dose")
