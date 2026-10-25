@@ -249,6 +249,20 @@ class UncitedAnswerGoldenTest(unittest.TestCase):
         escalate.assert_called_once()
 
 
+class PiiInReplyGoldenTest(unittest.TestCase):
+    def test_phone_in_an_allowed_reply_is_masked(self):
+        passages = "Call the ward on 555-123-4567.\nSource:\ns3://docs/approved/v.md"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
+                mock.patch("builtins.open", mock.mock_open(read_data="")):
+            out = supervisor_agent.supervisor_flow("visiting hours", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("[PHONE]", out["draft_response"])
+        self.assertNotIn("555-123-4567", out["draft_response"])
+
+
 class MixedSourceGoldenTest(unittest.TestCase):
     def test_untrusted_passage_is_dropped_from_the_draft(self):
         for passages in (

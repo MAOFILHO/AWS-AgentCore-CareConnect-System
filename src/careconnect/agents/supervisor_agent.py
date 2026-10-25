@@ -219,6 +219,11 @@ def escalation_notice(request):
 # Orchestrator — ties the five stages together.
 # ---------------------------------------------------------------------------
 def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
+    out = _supervisor_flow(request, cost_meter=cost_meter, budgets=budgets, clock=clock)
+    return {**out, "draft_response": mask_pii(out["draft_response"])}
+
+
+def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
     state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
     request_id = str(uuid.uuid4())
     outcome = {"request_id": request_id, "request": mask_pii(request), "plan": [], "verification": {"verification_status": "n/a"}}
@@ -261,7 +266,7 @@ def api_result(outcome):
     """The API reply: decision, reply and citations only. Never the request text."""
     return ApiReply(
         decision=outcome["decision"],
-        reply=mask_pii(outcome["draft_response"]),
+        reply=outcome["draft_response"],
         citations=outcome.get("citations", []),
     ).model_dump()
 
