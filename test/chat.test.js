@@ -108,6 +108,9 @@ test("show() renders the status above the reply text with textContent", () => {
   const plain = el();
   show(doc, plain, { text: "ok", citations: [] });
   assert.equal(plain.children.length, 1);
+  const stopped = el();
+  show(doc, stopped, { text: "r", citations: [], status: STOPPED });
+  assert.equal(stopped.children[0].textContent, STOPPED);
 });
 
 test("each of the 4 decisions gives the right status", async () => {
