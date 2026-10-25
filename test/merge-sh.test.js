@@ -3,18 +3,19 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
-const script = new URL("../.sandcastle/merge.sh", import.meta.url).pathname;
+const script = fileURLToPath(new URL("../.sandcastle/merge.sh", import.meta.url));
 
-function runMerge({ mergeFails = false } = {}) {
+function runMerge({ mergeFails = false, sha = SHA } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "merge-sh-"));
   const log = join(dir, "calls.log");
   const gh = `#!/usr/bin/env bash
 echo "$*" >> "${log}"
 case "$1 $2" in
-  "pr view") printf 'sandcastle/issue-1\\tfalse\\tfalse\\t${SHA}\\n' ;;
+  "pr view") printf 'sandcastle/issue-1\\tfalse\\tfalse\\t${sha}\\n' ;;
   "pr checks") printf 'test\\tpass\\t1m\\n' ;;
   "pr merge") ${mergeFails ? "echo 'head commit mismatch' >&2; exit 1" : "exit 0"} ;;
 esac
@@ -38,5 +39,12 @@ test("merge.sh merges only the head commit it read", () => {
 test("merge.sh fails and prints no merged line when GitHub refuses the merge", () => {
   const r = runMerge({ mergeFails: true });
   assert.notEqual(r.status, 0);
+  assert.doesNotMatch(r.stdout, /merged PR/);
+});
+
+test("merge.sh refuses before merging when headRefOid is empty", () => {
+  const r = runMerge({ sha: "" });
+  assert.notEqual(r.status, 0);
+  assert.ok(!r.calls.some((c) => c.startsWith("pr merge")), r.calls.join("\n"));
   assert.doesNotMatch(r.stdout, /merged PR/);
 });
