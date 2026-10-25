@@ -201,6 +201,11 @@ class TaskToolFlowTest(unittest.TestCase):
         self.assertIn("awaits human approval", out["reply"])
         self.assertIs(out["task"]["submitted"], False)
         self.assertEqual(out["task"]["status"], "awaiting_approval")
+        self.assertIs(out["staged"], True)
+
+    def test_only_a_staged_refill_sets_staged(self):
+        self.assertFalse(self.flow("What is my appointment status?").get("staged", False))
+        self.assertFalse(self.flow("Please refill my Metformin", key=" ").get("staged", False))
 
     def test_refill_without_idempotency_key_shows_escalation_notice(self):
         out = self.flow("Please refill my Metformin")

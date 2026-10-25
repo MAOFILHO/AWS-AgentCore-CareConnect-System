@@ -34,17 +34,23 @@ import re
 import uuid
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
+from pydantic import ValidationError
+
 from careconnect.agents.escalation_agent import escalate
 from careconnect.agents.verification_agent import get_guardrail_settings, verify
 from careconnect.api_reply import ApiReply
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
+from careconnect.gateway import StagedRefillToolReply
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
+STAGED_NOTICE = "Your refill is staged and awaits human approval. It has not been submitted."
+OTHER_REQUEST_NOTICE = "Please ask separately about your other request."
+UNANSWERED_NOTICE = "I ran out of time to answer your other question; please ask it again."
 log = logging.getLogger(__name__)
 
 
@@ -74,6 +80,12 @@ INFORMATIONAL_KEYWORDS = [
     "appointment", "book", "hours",
 ]
 OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
+QUESTION_WORDS = ("how", "what", "when", "where", "why", "which", "who")
+
+
+def is_refill_request(request):
+    """An explicit 'refill my X' request, not a question about the refill process."""
+    return bool(REFILL_REQUEST.search(request)) and not request.lower().lstrip().startswith(QUESTION_WORDS)
 
 
 def create_plan(request, safety, state):
@@ -84,7 +96,7 @@ def create_plan(request, safety, state):
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
     if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
-    if any(k in lowered for k in OPERATIONAL_KEYWORDS):
+    if any(k in lowered for k in OPERATIONAL_KEYWORDS) or is_refill_request(request):
         plan.append({"task": "Check operational status", "agent": "task"})
     if not plan:
         plan.append({"task": "General approved-information lookup", "agent": "retrieval"})
@@ -118,11 +130,41 @@ def split_passages(text):
     return [c for b in blocks for c in re.findall(r"(?s).*?^Source:[ \t]*\n\S+", b, flags=re.MULTILINE)]
 
 
+def tool_short_name(name):
+    """Gateway tool names are '<target>___<tool>'."""
+    return name.split("___")[-1]
+
+
+def refill_was_staged(messages):
+    """True only if a stage_refill_request tool call returned awaiting_approval, not submitted."""
+    blocks = [b for m in messages if isinstance(m, dict) for b in m.get("content", []) if isinstance(b, dict)]
+    staging_calls = {
+        use["toolUseId"] for use in (b.get("toolUse") for b in blocks)
+        if isinstance(use, dict) and use.get("toolUseId")
+        and tool_short_name(use.get("name", "")) == "stage_refill_request"
+    }
+    for block in blocks:
+        result = block.get("toolResult")
+        if not isinstance(result, dict) or result.get("toolUseId") not in staging_calls or result.get("status") == "error":
+            continue
+        for part in result.get("content", []):
+            try:
+                if "json" in part:
+                    StagedRefillToolReply.model_validate(part["json"], strict=True)
+                else:
+                    StagedRefillToolReply.model_validate_json(part["text"], strict=True)
+            except (ValidationError, KeyError, TypeError):
+                continue
+            return True
+    return False
+
+
 def run_task_tool(request, state):
+    """Returns {"reply": text, "staged": True only when the Gateway staged a refill}."""
     state.step("Task/Tool Agent (AgentCore Gateway / MCP)")
     # >>> LEARNERS: export CARECONNECT_GATEWAY_URL="<your-gateway-mcp-url>"
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
-        return "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]"
+        return {"reply": "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]", "staged": False}
     model = load_supervisor_model()  # a config error must not read as a gateway error
     try:
         from careconnect.agents.task_tool_agent import SYSTEM_PROMPT, get_mcp_client
@@ -130,9 +172,10 @@ def run_task_tool(request, state):
         with get_mcp_client() as mcp_client:
             tools = mcp_client.list_tools_sync()
             agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=model)
-            return str(agent(request))
+            reply = str(agent(request))
+            return {"reply": reply, "staged": refill_was_staged(agent.messages)}
     except Exception:
-        return "[task/tool agent error - gateway call failed]"
+        return {"reply": "[task/tool agent error - gateway call failed]", "staged": False}
 
 
 def run_escalation(request, state):
@@ -171,7 +214,7 @@ def combine_safe_results(results, safety, state):
         evidence = results["retrieval"].get("passages", "")
         parts.append("Approved Riverside Health information:\n" + evidence)
     if "task" in results:
-        parts.append("Operational status:\n" + results["task"])
+        parts.append("Operational status:\n" + results["task"]["reply"])
     if "escalation" in results:
         esc = results["escalation"]
         # Never surface a clinical answer - only the escalation notice.
@@ -238,6 +281,8 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         draft, evidence = combine_safe_results(results, safety, state)
         if safety["clinical_detected"]:
             return {**outcome, "decision": "escalate", "draft_response": draft}
+        if results.get("task", {}).get("staged"):  # fixed notice: never the model's free text
+            return {**outcome, **staged_reply(request, results, evidence, state)}
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
@@ -256,6 +301,27 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
             "citations": citations}
 
 
+def staged_reply(request, results, evidence, state):
+    """STAGED_NOTICE, after the verified retrieval answer if the request had one."""
+    reply, citations = STAGED_NOTICE, []
+    if "retrieval" in results and evidence.strip():
+        info = "Approved Riverside Health information:\n" + evidence
+        sources = approved_sources(evidence)
+        try:  # the refill is already staged: no failure here may hide that
+            passed = bool(sources) and verify_response(info, evidence, state).get("verification_status") == "PASS"
+            if passed:
+                reply, citations = info + "\n\n" + STAGED_NOTICE, sources
+            else:
+                reply += " " + escalation_notice(request)  # opens the ticket, as on the normal path
+        except BudgetExceeded:
+            reply, citations = STAGED_NOTICE + " " + UNANSWERED_NOTICE, []
+        except Exception:
+            reply, citations = STAGED_NOTICE + " " + escalation_notice(request), []
+    if any(k in request.lower() for k in OPERATIONAL_KEYWORDS):
+        reply += " " + OTHER_REQUEST_NOTICE
+    return {"decision": "allow", "draft_response": reply, "staged": True, "citations": citations}
+
+
 def approved_sources(evidence):
     """Citations are the retrieval Source URIs under approved/ only."""
     uris = re.findall(r"^Source:\s*\n(s3://[^\s/]+/approved/\S+)", evidence, flags=re.MULTILINE)
@@ -263,11 +329,12 @@ def approved_sources(evidence):
 
 
 def api_result(outcome):
-    """The API reply: decision, reply and citations only. Never the request text."""
+    """The API reply: decision, reply, citations and staged only. Never the request text."""
     return ApiReply(
         decision=outcome["decision"],
         reply=outcome["draft_response"],
         citations=outcome.get("citations", []),
+        staged=outcome.get("staged", False),
     ).model_dump()
 
 

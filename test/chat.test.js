@@ -122,3 +122,19 @@ test("each of the 4 decisions gives the right status", async () => {
   }
   assert.equal("status" in await ask("q", { apiUrl, fetch: fakeApi(500, {}) }), false);
 });
+
+const AWAITING = "Awaiting clinician approval.";
+
+test("a staged reply shows the awaiting-approval status; false or missing shows none", async () => {
+  const body = { decision: "allow", reply: "Staged.", citations: [] };
+  assert.equal((await ask("q", { apiUrl, fetch: fakeApi(200, { ...body, staged: true }) })).status, AWAITING);
+  for (const staged of [false, undefined, "true", 1]) {
+    const result = await ask("q", { apiUrl, fetch: fakeApi(200, { ...body, staged }) });
+    assert.equal("status" in result, false, String(staged));
+  }
+  const esc = await ask("q", { apiUrl, fetch: fakeApi(200, { decision: "escalate", reply: "r", staged: true }) });
+  assert.equal(esc.status, ESCALATE);
+  const box = el();
+  show({ createElement: el }, box, { text: "<b>x</b>", citations: [], status: AWAITING });
+  assert.equal(box.children[0].textContent, AWAITING);
+});
