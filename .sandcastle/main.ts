@@ -183,7 +183,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       const review = async (name: string, model: string, file: string): Promise<Verdict> => {
         let error = "";
         for (let attempt = 1; attempt <= 2; attempt++) {
-          const r = await sandbox.run({
+          const r = await sandbox!.run({
             name: `${name}-${issue.id}-r${round}${attempt > 1 ? "-retry" : ""}`,
             maxIterations: 1,
             agent: sandcastle.claudeCode(model),
