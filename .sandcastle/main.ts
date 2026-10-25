@@ -19,6 +19,7 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
+import { priorFindings } from "./prior-findings.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -142,8 +143,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     // Build
     // Findings from an earlier failed run, read only from a comment by the factory's own account.
     const me = gh("api", "user", "-q", ".login");
-    const prior = gh("issue", "view", issue.id, "--json", "comments", "-q",
-      `[.comments[] | select(.author.login == "${me}" and (.body | startswith("Factory: review round")))] | last | .body // ""`);
+    const prior = priorFindings(JSON.parse(gh("issue", "view", issue.id, "--json", "comments", "-q", ".comments")), me);
     log(tag, "implementer starting");
     const build = await sandbox.run({
       name: `implement-${issue.id}`,
@@ -267,6 +267,8 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
         renderFindings("Code review", codeV),
         renderFindings("Security review", secV),
       ].join("\n"));
+    } else {
+      gh("issue", "comment", issue.id, "--body", `Factory: review passed on ${issue.branch} after ${round} review round(s). Earlier findings are fixed.`);
     }
     if (securityBlock) gh("pr", "edit", prUrl, "--add-label", "needs-human");
     log(tag, `${passed ? "PR" : "draft PR"} ${updated ? "updated" : "opened"}: ${prUrl}`);
