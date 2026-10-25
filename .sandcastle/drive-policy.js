@@ -39,3 +39,9 @@ export const countDriveAttempts = (comments, me) =>
 // The CI review text that travels back to the builder: only the Actions bot may write it, so no commenter can plant a prompt.
 export const trustedReview = (comments) =>
   comments.filter((c) => c.author?.login === "github-actions" && (c.body ?? "").includes("<!-- factory-review -->")).at(-1)?.body ?? "";
+
+// Quality rule: the model that reviews must not be the model that built. Checked once, before any container starts.
+export function assertIndependentReviewers(builder, reviewer, security) {
+  if (reviewer === builder) throw new Error(`reviewer model ${reviewer} is the builder model; set FACTORY_REVIEWER_MODEL to a different model`);
+  if (security === builder) throw new Error(`security model ${security} is the builder model; set FACTORY_SECURITY_MODEL to a different model`);
+}

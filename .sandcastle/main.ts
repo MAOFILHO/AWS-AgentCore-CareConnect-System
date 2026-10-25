@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
 import { priorFindings } from "./prior-findings.js";
-import { nextStep, findingsComment, countDriveAttempts, trustedReview, changedPaths } from "./drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts, trustedReview, changedPaths, assertIndependentReviewers } from "./drive-policy.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -33,6 +33,7 @@ const MODELS = {
   reviewer: process.env.FACTORY_REVIEWER_MODEL ?? "claude-opus-5-5",
   security: process.env.FACTORY_SECURITY_MODEL ?? "claude-opus-5-5",
 };
+assertIndependentReviewers(MODELS.builder, MODELS.reviewer, MODELS.security);
 const MAX_PARALLEL = Number(process.env.FACTORY_MAX_PARALLEL ?? 3);
 const MAX_REVIEW_ROUNDS = Number(process.env.FACTORY_MAX_REVIEW_ROUNDS ?? 5);
 const MAX_BUILD_ITERATIONS = 40; // implementer loop cap per issue
