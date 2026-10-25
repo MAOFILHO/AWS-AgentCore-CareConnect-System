@@ -2,12 +2,18 @@ import { REQUIRED_CHECKS } from "./auto-merge.js";
 
 // Files that judge or steer the factory itself. The factory never merges a PR that changes one: a human does.
 const CONTROL = [".sandcastle/", ".github/", ".claude/", "Docs/adr/", "AGENTS.md", "CLAUDE.md", "REVIEW.md",
-  "package.json", "package-lock.json", "requirements.txt", ".semgrep.yml", "eslint.config.js", "tsconfig.json"];
-export const touchesControl = (files) => files.some((f) => CONTROL.some((c) => (c.endsWith("/") ? f.startsWith(c) : f === c)));
+  "infra/", "Docs/Repo/careconnect-approved-docs/", "package.json", "package-lock.json", "requirements.txt", ".semgrep.yml", "eslint.config.js", "tsconfig.json"];
+// Tests that guard patient safety, and the tests of this policy: a PR may add lines to them, never remove one.
+const GUARD_TESTS = ["test/test_golden.py", "test/test_safety_gate.py", "test/test_verification.py", "test/test_untrusted_documents.py",
+  "test/test_logging.py", "test/test_runtime_entrypoint.py", "test/auto-merge.test.js", "test/drive-policy.test.js", "test/merge-sh.test.js",
+  "test/prior-findings.test.js"];
+const match = (list, f) => list.some((c) => (c.endsWith("/") ? f.startsWith(c) : f === c));
+/** @param {{ path: string, deletions: number }[]} files */
+export const touchesControl = (files) => files.some((f) => match(CONTROL, f.path) || (match(GUARD_TESTS, f.path) && f.deletions > 0));
 
 // What the factory does next with one PR. No human question: wait, merge, send back to build, or stop after the attempt cap.
 /**
- * @param {{ checks: { name: string, bucket: string }[], attempts: number, maxAttempts: number, draft: boolean, needsHuman: boolean, files: string[] }} s
+ * @param {{ checks: { name: string, bucket: string }[], attempts: number, maxAttempts: number, draft: boolean, needsHuman: boolean, files: { path: string, deletions: number }[] }} s
  * @returns {{ action: "wait" | "merge" | "hold" | "rebuild" | "stop", reason: string }}
  */
 export function nextStep({ checks, attempts, maxAttempts, draft, needsHuman, files }) {

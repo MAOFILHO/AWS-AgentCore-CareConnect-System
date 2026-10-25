@@ -303,6 +303,7 @@ for (const r of results.filter((x) => x.pr)) {
   const attempts = () =>
     countDriveAttempts(JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")), me) + 1;
   try {
+    const attemptNo = attempts();
     for (let waited = 0; ; waited += WAIT_MS) {
       const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments,files"));
       // gh pr checks exits non-zero while a check is pending or failed, but still prints the JSON on stdout.
@@ -311,9 +312,9 @@ for (const r of results.filter((x) => x.pr)) {
       catch (e) { out = String((e as { stdout?: string }).stdout ?? ""); }
       const checks = JSON.parse(out.trim() || "[]");
       const step = nextStep({
-        checks, attempts: attempts(), maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
+        checks, attempts: attemptNo, maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
         needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
-        files: view.files.map((f: { path: string }) => f.path),
+        files: view.files,
       });
       if (step.action === "wait") {
         if (waited >= MAX_WAIT_MS) { log(`#${r.id}`, "checks still running after 20 minutes; leaving the PR for the next run"); break; }
@@ -325,8 +326,10 @@ for (const r of results.filter((x) => x.pr)) {
         log(`#${r.id}`, `merged PR ${pr}`);
         again = true;
       } else if (step.action === "rebuild") {
-        const review = trustedReview(view.comments) || step.reason;
-        gh("issue", "comment", r.id, "--body", findingsComment(attempts(), Number(pr), r.branch, `${step.reason}\n\n${review}`));
+        // Keep the in-container findings too: priorFindings reads only the newest factory comment.
+        const inContainer = priorFindings(JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")), me);
+        const review = [trustedReview(view.comments), inContainer].filter(Boolean).join("\n\n") || step.reason;
+        gh("issue", "comment", r.id, "--body", findingsComment(attemptNo, Number(pr), r.branch, `${step.reason}\n\n${review}`));
         log(`#${r.id}`, `back to build: ${step.reason}`);
         again = true;
       } else if (step.action === "hold") {
