@@ -1,4 +1,6 @@
+import json
 import sys
+import types
 import unittest
 from unittest import mock
 
@@ -6,7 +8,7 @@ from careconnect import runtime_entrypoint
 from careconnect.agents import supervisor_agent
 from careconnect.api_reply import ApiReply
 from careconnect.budget import BUDGET_MESSAGE, Budgets
-from careconnect.fakes import FakeCostMeter
+from careconnect.fakes import FakeCostMeter, FakeMcpClient, FakeTaskAgent
 from careconnect.supervisor import ESCALATION_FAILED_NOTICE
 
 PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
@@ -46,30 +48,37 @@ class RuntimeEntrypointTest(unittest.TestCase):
         out = self.invoke("visiting hours", budgets=Budgets(max_steps=1, max_cost_usd=0.05, max_seconds=30))
         self.assertEqual((out["decision"], out["reply"]), ("stop", BUDGET_MESSAGE))
 
-    def test_staged_refill_sets_staged(self):
-        staged = {"status": "awaiting_approval", "submitted": False}
-        messages = [
-            {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "name": "tools___stage_refill_request"}}]},
-            {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "status": "success", "content": [{"json": staged}]}}]},
-        ]
-        agent = mock.Mock(messages=messages, return_value="done")
-        mcp = mock.MagicMock()
-        mcp.__enter__.return_value.list_tools_sync.return_value = []
-        task = mock.Mock(SYSTEM_PROMPT="p", get_mcp_client=mock.Mock(return_value=mcp))
-        strands = mock.Mock(Agent=mock.Mock(return_value=agent))
+    def run_task_flow(self, messages, prompt="Please reschedule my appointment and refill my Metformin"):
+        task = types.SimpleNamespace(SYSTEM_PROMPT="p", get_mcp_client=FakeMcpClient)
+        strands = types.SimpleNamespace(Agent=lambda **kw: FakeTaskAgent(messages))
+        real = supervisor_agent.supervisor_flow
+        flow = lambda request: real(request, cost_meter=FakeCostMeter())
         with mock.patch.dict(sys.modules, {"careconnect.agents.task_tool_agent": task, "strands": strands}), \
                 mock.patch.object(supervisor_agent, "load_supervisor_model", return_value=None), \
+                mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
+                mock.patch.object(runtime_entrypoint, "supervisor_flow", flow), \
                 mock.patch.dict("os.environ", {"CARECONNECT_GATEWAY_URL": "gw"}):
-            real = supervisor_agent.supervisor_flow
-            flow = lambda request: real(request, cost_meter=FakeCostMeter())
-            with mock.patch.object(runtime_entrypoint, "supervisor_flow", flow):
-                out = runtime_entrypoint.invoke({"prompt": "Please refill my Metformin"})
-            self.assertEqual((out["decision"], out["staged"]), ("allow", True))
-            self.assertNotIn("Metformin", str(out))
-            agent.messages = []  # no staging call: nothing is staged
-            with mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
-                    mock.patch.object(runtime_entrypoint, "supervisor_flow", flow):
-                out = runtime_entrypoint.invoke({"prompt": "Please refill my Metformin"})
+            return runtime_entrypoint.invoke({"prompt": prompt})
+
+    def staging_messages(self, content):
+        return [
+            {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "name": "tools___stage_refill_request"}}]},
+            {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "status": "success", "content": [content]}}]},
+        ]
+
+    def test_staged_refill_sets_staged(self):
+        staged = {"action": "submit_refill", "drug": "Metformin", "status": "awaiting_approval",
+                  "idempotency_key": "k", "submitted": False}
+        for content in ({"json": staged}, {"text": json.dumps(staged)}):
+            with self.subTest(content=list(content)):
+                out = self.run_task_flow(self.staging_messages(content))
+                self.assertEqual((out["decision"], out["staged"]), ("allow", True))
+                self.assertNotIn("Metformin", str(out))
+
+    def test_refill_that_is_not_staged_leaves_staged_false(self):
+        submitted = {"drug": "Metformin", "status": "awaiting_approval", "idempotency_key": "k", "submitted": True}
+        for messages in ([], self.staging_messages({"json": submitted}), self.staging_messages({"text": "not json"})):
+            out = self.run_task_flow(messages)
             self.assertIs(out["staged"], False)
 
     def test_missing_or_empty_request_escalates_without_calling_flow(self):

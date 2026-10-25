@@ -71,3 +71,26 @@ class FakeCostMeter:
 
     def charge(self, name):
         self.total += self.cost_per_step
+
+
+class FakeMcpClient:
+    """Stands in for the Gateway MCP client: a context manager that lists no tools."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def list_tools_sync(self):
+        return []
+
+
+class FakeTaskAgent:
+    """Stands in for the Task/Tool Agent: replies "done" and keeps the given tool messages."""
+
+    def __init__(self, messages):
+        self.messages = messages
+
+    def __call__(self, request):
+        return "done"

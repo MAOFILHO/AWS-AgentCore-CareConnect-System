@@ -28,21 +28,23 @@ HOW TO USE
   3. Type a patient request; type 'exit' to stop.
 """
 
-import json
 import logging
 import os
 import re
 import uuid
 
 # Specialist agents live in the same package; run with PYTHONPATH=src.
+from pydantic import ValidationError
+
 from careconnect.agents.escalation_agent import escalate
 from careconnect.agents.verification_agent import get_guardrail_settings, verify
 from careconnect.api_reply import ApiReply
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
+from careconnect.gateway import StagedRefillResult
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
@@ -84,8 +86,6 @@ def create_plan(request, safety, state):
     plan = []
     if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
-    if REFILL_REQUEST.search(request):
-        return [{"task": "Stage refill request", "agent": "task"}]
     if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
     if any(k in lowered for k in OPERATIONAL_KEYWORDS):
@@ -127,7 +127,7 @@ def refill_was_staged(messages):
     staging_calls = {
         block["toolUse"]["toolUseId"]
         for m in messages for block in m.get("content", [])
-        if isinstance(block, dict) and block.get("toolUse", {}).get("name", "").endswith("stage_refill_request")
+        if isinstance(block, dict) and block.get("toolUse", {}).get("name", "").split("___")[-1] == "stage_refill_request"
     }
     for m in messages:
         for block in m.get("content", []):
@@ -135,14 +135,14 @@ def refill_was_staged(messages):
             if not result or result.get("toolUseId") not in staging_calls or result.get("status") == "error":
                 continue
             for part in result.get("content", []):
-                data = part.get("json")
-                if data is None and "text" in part:
-                    try:
-                        data = json.loads(part["text"])
-                    except ValueError:
-                        continue
-                if isinstance(data, dict) and data.get("status") == "awaiting_approval" and data.get("submitted") is False:
-                    return True
+                try:
+                    if "json" in part:
+                        StagedRefillResult.model_validate(part["json"])
+                    else:
+                        StagedRefillResult.model_validate_json(part["text"])
+                except (ValidationError, KeyError):
+                    continue
+                return True
     return False
 
 

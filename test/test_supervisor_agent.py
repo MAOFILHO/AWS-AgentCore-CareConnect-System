@@ -54,6 +54,12 @@ class DeployableSupervisorTest(unittest.TestCase):
             self.assertNotIn("11:00", out["reply"])
             self.escalate.assert_called_once()
 
+    def test_refill_questions_keep_retrieval_routing(self):
+        for text in ("How do I request a refill of my blood pressure medication?",
+                     "What is the policy for a refill for my inhaler?"):
+            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
+            self.assertEqual([p["agent"] for p in plan], ["retrieval"])
+
     def test_api_result_carries_staged(self):
         base = {"decision": "allow", "draft_response": "ok"}
         self.assertIs(supervisor_agent.api_result(base)["staged"], False)

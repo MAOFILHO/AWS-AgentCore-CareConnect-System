@@ -12,13 +12,17 @@ class AppointmentStatus(BaseModel):
     appointment_reference: str
 
 
-class StagedRefill(BaseModel):
+class StagedRefillResult(BaseModel):
+    """What the Gateway's stage_refill_request tool returns."""
     action: Literal["submit_refill"] = "submit_refill"
-    patient_reference: str
     drug: str
     status: Literal["awaiting_approval"] = "awaiting_approval"
     idempotency_key: str
     submitted: Literal[False] = False
+
+
+class StagedRefill(StagedRefillResult):
+    patient_reference: str
 
 
 class FakeGateway:
