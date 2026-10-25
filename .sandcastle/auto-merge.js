@@ -33,7 +33,10 @@ const isProtected = (file) => PROTECTED.some((p) => (p.endsWith("/") ? file.star
 // The fix must be that phrase alone (any case, optional trailing period), the one .sandcastle/security-prompt.md tells the reviewer to write; keep them in sync.
 // The file must also be one the PR changed, so a bent reviewer reply cannot hide a blocker behind an untouched file.
 export const isHumanGate = (finding, changedFiles) =>
-  finding.severity === "blocker" && changedFiles.includes(finding.file) && isProtected(finding.file) && /^\s*human review required\.?\s*$/i.test(finding.fix);
+  finding.severity === "blocker" &&
+  changedFiles.includes(finding.file) &&
+  isProtected(finding.file) &&
+  /^\s*human review required\.?\s*$/i.test(finding.fix);
 
 export function decide({ enabled, crossRepository, branch, draft, labels, checks, files, changedFiles }) {
   if (!enabled) return { merge: false, reason: "auto-merge is switched off" };

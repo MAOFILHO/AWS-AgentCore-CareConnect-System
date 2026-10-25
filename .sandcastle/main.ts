@@ -167,7 +167,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     let lastReviewedSha = build.commits.at(-1)!.sha;
     const mergeBase = execFileSync("git", ["merge-base", "HEAD", issue.branch], { encoding: "utf8" }).trim();
     // Files the branch changes; a human-gate blocker only counts for one of these.
-    const changedFiles = () =>
+    const listChangedFiles = () =>
       execFileSync("git", ["diff", "--name-only", mergeBase, issue.branch], { encoding: "utf8" }).split("\n").filter(Boolean);
     let baseForDiff = mergeBase; // round 1 reviews the whole branch
     while (round < MAX_REVIEW_ROUNDS) {
@@ -196,7 +196,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
         // Stagger the start: two containers writing ~/.gitconfig at once fail with "could not lock config file".
         new Promise((r) => setTimeout(r, 5000)).then(() => review("security", MODELS.security, "./.sandcastle/security-prompt.md")),
       ]);
-      const changed = changedFiles();
+      const changed = listChangedFiles();
       const blocking = [...code.findings, ...sec.findings].filter((f) => f.severity !== "minor" && !isHumanGate(f, changed));
       if (code.verdict === "PASS" && securityPassed(sec, changed)) break;
       if (round === MAX_REVIEW_ROUNDS) break;
@@ -226,7 +226,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
     // Push + PR. The agent never merges. The factory-merge Action or a human with .sandcastle/merge.sh merges.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
-    const changed = changedFiles();
+    const changed = listChangedFiles();
     const passed = codeV.verdict === "PASS" && securityPassed(secV, changed);
     const securityBlock = secV.findings.some((f) => f.severity === "blocker" && !isHumanGate(f, changed));
     const body = [
