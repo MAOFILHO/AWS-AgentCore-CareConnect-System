@@ -4,12 +4,16 @@ export const REQUIRED_CHECKS = [
 ];
 
 // Files a human must merge: patient-safety code, the release gate, dependencies, workflows and approved documents.
+// Any new module on the request path must be added here, because top-level src/careconnect/*.py is allowed.
+// A protected PR that imports a new careconnect module must have that module reviewed, or add it here in the same PR.
+// api_reply.py is on the request path but is allowed on purpose (issue #80). Moving it into PROTECTED, or out of it, needs a REVIEW.md note in the same PR.
 // A prefix ends in "/". Edit this list to widen or narrow what the factory may merge on its own.
 export const PROTECTED = [
   "src/careconnect/agents/", "src/careconnect/safety_gate.py", "src/careconnect/supervisor.py",
   "src/careconnect/supervisor_model.py", "src/careconnect/verification.py", "src/careconnect/gateway.py",
   "src/careconnect/budget.py", "src/careconnect/config.json", "src/careconnect/document_processing.py",
-  "src/careconnect/ingest.py", "test/test_golden.py", "test/test_safety_gate.py",
+  "src/careconnect/ingest.py", "src/careconnect/runtime_entrypoint.py", "test/test_runtime_entrypoint.py",
+  "test/test_golden.py", "test/test_safety_gate.py",
   ".github/", ".sandcastle/", ".claude/", "infra/", "Docs/adr/", "Docs/Repo/lambda-functions/",
   "Docs/Repo/careconnect-approved-docs/", "AGENTS.md", "REVIEW.md",
   "package.json", "package-lock.json", "requirements.txt",
@@ -21,9 +25,11 @@ export const PROTECTED = [
   "test/auto-merge.test.js",
 ];
 
-// The factory merges only files that match here. A new file in any other place needs a human,
-// so a file this list forgot to protect fails closed.
-const ALLOWED = [/^src\/frontend\/[^.][^/]*(\/[^/]+)*$/, /^test\/[^/]+\.test\.js$/, /^(README|GLOSSARY)\.md$/];
+// The factory merges only files that match here. A new file in any other place needs a human.
+// Top-level src/careconnect/*.py and test/test_*.py are the exception: a file PROTECTED forgot to list will auto-merge.
+const ALLOWED = [/^src\/frontend\/[^.][^/]*(\/[^/]+)*$/, /^test\/[^/]+\.test\.js$/, /^(README|GLOSSARY)\.md$/,
+  /^src\/careconnect\/[^_./][^/]*\.py$/, /^test\/test_[^/]+\.py$/,
+];
 
 const isAllowed = (file) => !file.includes("..") && ALLOWED.some((re) => re.test(file));
 
