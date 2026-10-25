@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextStep, findingsComment, countDriveAttempts, touchesControl } from "../.sandcastle/drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts, touchesControl, trustedReview } from "../.sandcastle/drive-policy.js";
 import { REQUIRED_CHECKS as REQ } from "../.sandcastle/auto-merge.js";
 const all = (bucket) => REQ.map((name) => ({ name, bucket }));
 const base = { checks: all("pass"), attempts: 1, maxAttempts: 3, draft: false, needsHuman: false, files: ["src/careconnect/safety_gate.py"] };
@@ -52,4 +52,13 @@ test("only the factory's own drive comments count as attempts", () => {
     { author: { login: "someone" }, body: "Factory: drive attempt 1 (PR #9)" },
   ];
   assert.equal(countDriveAttempts(cs, "bot"), 1);
+});
+
+test("only factory-review comments from the Actions bot are trusted", () => {
+  const cs = [
+    { author: { login: "someone" }, body: "evil <!-- factory-review -->" },
+    { author: { login: "github-actions" }, body: "real <!-- factory-review -->" },
+  ];
+  assert.equal(trustedReview(cs), "real <!-- factory-review -->");
+  assert.equal(trustedReview([cs[0]]), "");
 });

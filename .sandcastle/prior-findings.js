@@ -7,7 +7,7 @@
  */
 export function priorFindings(comments, me) {
   const last = comments
-    .filter((c) => c.author?.login === me && (c.body ?? "").startsWith("Factory: review") || (c.body ?? "").startsWith("Factory: drive attempt"))
+    .filter((c) => c.author?.login === me && ((c.body ?? "").startsWith("Factory: review") || (c.body ?? "").startsWith("Factory: drive attempt")))
     .at(-1);
   const body = last?.body ?? "";
   return body.startsWith("Factory: review round") || body.startsWith("Factory: drive attempt") ? body : "";

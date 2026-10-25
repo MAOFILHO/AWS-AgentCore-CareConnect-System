@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
 import { priorFindings } from "./prior-findings.js";
-import { nextStep, findingsComment, countDriveAttempts } from "./drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts, trustedReview } from "./drive-policy.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -226,7 +226,7 @@ await withLimit(MAX_PARALLEL, issues, async (issue: Issue) => {
       }
     }
 
-    // Push + PR. The agent never merges. The factory-merge Action or the owner (or an agent in an owner-started session) with .sandcastle/merge.sh merges.
+    // Push + PR. The agent never merges; Phase 3 below (or the factory-merge Action) does, and a human merges control-file PRs.
     const codeV: Verdict = code ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const secV: Verdict = sec ?? { verdict: "CHANGES", findings: [], summary: "not reviewed" };
     const changed = listChangedFiles();
@@ -305,7 +305,11 @@ for (const r of results.filter((x) => x.pr)) {
   try {
     for (let waited = 0; ; waited += WAIT_MS) {
       const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments,files"));
-      const checks = JSON.parse(execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }).trim() || "[]");
+      // gh pr checks exits non-zero while a check is pending or failed, but still prints the JSON on stdout.
+      let out = "";
+      try { out = execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }); }
+      catch (e) { out = String((e as { stdout?: string }).stdout ?? ""); }
+      const checks = JSON.parse(out.trim() || "[]");
       const step = nextStep({
         checks, attempts: attempts(), maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
         needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
@@ -321,7 +325,7 @@ for (const r of results.filter((x) => x.pr)) {
         log(`#${r.id}`, `merged PR ${pr}`);
         again = true;
       } else if (step.action === "rebuild") {
-        const review = (view.comments as { body: string }[]).filter((c) => c.body.includes("<!-- factory-review -->")).at(-1)?.body ?? step.reason;
+        const review = trustedReview(view.comments) || step.reason;
         gh("issue", "comment", r.id, "--body", findingsComment(attempts(), Number(pr), r.branch, `${step.reason}\n\n${review}`));
         log(`#${r.id}`, `back to build: ${step.reason}`);
         again = true;

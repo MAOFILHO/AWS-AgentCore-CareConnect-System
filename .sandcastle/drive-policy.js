@@ -28,3 +28,7 @@ export const findingsComment = (round, pr, branch, findings) =>
 // Only the factory's own drive comments count; in-container review rounds do not.
 export const countDriveAttempts = (comments, me) =>
   comments.filter((c) => c.author?.login === me && (c.body ?? "").startsWith("Factory: drive attempt")).length;
+
+// The CI review text that travels back to the builder: only the Actions bot may write it, so no commenter can plant a prompt.
+export const trustedReview = (comments) =>
+  comments.filter((c) => c.author?.login === "github-actions" && (c.body ?? "").includes("<!-- factory-review -->")).at(-1)?.body ?? "";
