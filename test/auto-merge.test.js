@@ -25,6 +25,8 @@ test("it never merges a non-factory branch", () => refused({ branch: "main-fix" 
 test("it never merges a draft", () => refused({ draft: true }, /draft/));
 test("it never merges a needs-human PR", () => refused({ labels: ["needs-human"] }, /needs-human/));
 test("it never merges a protected-paths PR", () => refused({ labels: ["protected-paths"] }, /protected-paths/));
+test("the protected-paths label wins over a file outside the allow list", () =>
+  refused({ labels: ["protected-paths"], files: ["package.json"] }, /protected-paths label/));
 
 test("it never merges while a required check is failing, pending or missing", () => {
   for (const bucket of ["fail", "pending", "skipping", "cancel"]) {
