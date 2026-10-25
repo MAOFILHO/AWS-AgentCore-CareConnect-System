@@ -87,7 +87,7 @@ test("a budget stop shows the server's reply", async () => {
 
 test("a malformed 200 body shows the error notice", async () => {
   const expected = { text: ERROR_NOTICE, citations: [] };
-  for (const body of [{}, { decision: "allow" }, { decision: "escalate" }, { decision: "other", reply: "x" }, null]) {
+  for (const body of [{}, { decision: "allow" }, { decision: "escalate" }, { decision: "other", reply: "x" }, { decision: ["escalate"], reply: "x" }, { decision: ["block"], reply: "x" }, null]) {
     assert.deepEqual(await ask("q", { apiUrl, fetch: fakeApi(200, body) }), expected, JSON.stringify(body));
   }
 });

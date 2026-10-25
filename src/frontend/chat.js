@@ -13,7 +13,7 @@ export async function ask(question, { apiUrl, fetch }) {
     });
     if (!res.ok) return { text: ERROR_NOTICE, citations: [] };
     const body = await res.json();
-    if (Object.hasOwn(STATUS, body.decision) && typeof body.reply === "string") {
+    if (typeof body.decision === "string" && Object.hasOwn(STATUS, body.decision) &&typeof body.reply === "string") {
       return { text: body.reply, citations: [], status: STATUS[body.decision] };
     }
     if (body.decision === "allow" && typeof body.reply === "string") {
