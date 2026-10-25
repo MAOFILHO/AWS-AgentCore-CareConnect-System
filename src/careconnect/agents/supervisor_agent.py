@@ -28,6 +28,7 @@ HOW TO USE
   3. Type a patient request; type 'exit' to stop.
 """
 
+import json
 import logging
 import os
 import re
@@ -41,10 +42,11 @@ from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
+STAGED_NOTICE = "Your refill is staged and awaits human approval. It has not been submitted."
 log = logging.getLogger(__name__)
 
 
@@ -82,6 +84,8 @@ def create_plan(request, safety, state):
     plan = []
     if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
+    if REFILL_REQUEST.search(request):
+        return [{"task": "Stage refill request", "agent": "task"}]
     if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
     if any(k in lowered for k in OPERATIONAL_KEYWORDS):
@@ -118,11 +122,36 @@ def split_passages(text):
     return [c for b in blocks for c in re.findall(r"(?s).*?^Source:[ \t]*\n\S+", b, flags=re.MULTILINE)]
 
 
+def refill_was_staged(messages):
+    """True only if a stage_refill_request tool call returned awaiting_approval, not submitted."""
+    staging_calls = {
+        block["toolUse"]["toolUseId"]
+        for m in messages for block in m.get("content", [])
+        if isinstance(block, dict) and block.get("toolUse", {}).get("name", "").endswith("stage_refill_request")
+    }
+    for m in messages:
+        for block in m.get("content", []):
+            result = block.get("toolResult") if isinstance(block, dict) else None
+            if not result or result.get("toolUseId") not in staging_calls or result.get("status") == "error":
+                continue
+            for part in result.get("content", []):
+                data = part.get("json")
+                if data is None and "text" in part:
+                    try:
+                        data = json.loads(part["text"])
+                    except ValueError:
+                        continue
+                if isinstance(data, dict) and data.get("status") == "awaiting_approval" and data.get("submitted") is False:
+                    return True
+    return False
+
+
 def run_task_tool(request, state):
+    """Returns {"reply": text, "staged": True only when the Gateway staged a refill}."""
     state.step("Task/Tool Agent (AgentCore Gateway / MCP)")
     # >>> LEARNERS: export CARECONNECT_GATEWAY_URL="<your-gateway-mcp-url>"
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
-        return "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]"
+        return {"reply": "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]", "staged": False}
     model = load_supervisor_model()  # a config error must not read as a gateway error
     try:
         from careconnect.agents.task_tool_agent import SYSTEM_PROMPT, get_mcp_client
@@ -130,9 +159,10 @@ def run_task_tool(request, state):
         with get_mcp_client() as mcp_client:
             tools = mcp_client.list_tools_sync()
             agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=model)
-            return str(agent(request))
+            reply = str(agent(request))
+            return {"reply": reply, "staged": refill_was_staged(agent.messages)}
     except Exception:
-        return "[task/tool agent error - gateway call failed]"
+        return {"reply": "[task/tool agent error - gateway call failed]", "staged": False}
 
 
 def run_escalation(request, state):
@@ -171,7 +201,7 @@ def combine_safe_results(results, safety, state):
         evidence = results["retrieval"].get("passages", "")
         parts.append("Approved Riverside Health information:\n" + evidence)
     if "task" in results:
-        parts.append("Operational status:\n" + results["task"])
+        parts.append("Operational status:\n" + results["task"]["reply"])
     if "escalation" in results:
         esc = results["escalation"]
         # Never surface a clinical answer - only the escalation notice.
@@ -238,6 +268,8 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         draft, evidence = combine_safe_results(results, safety, state)
         if safety["clinical_detected"]:
             return {**outcome, "decision": "escalate", "draft_response": draft}
+        if results.get("task", {}).get("staged"):  # fixed reply: never the model's free text
+            return {**outcome, "decision": "allow", "draft_response": STAGED_NOTICE, "staged": True}
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
@@ -263,7 +295,7 @@ def approved_sources(evidence):
 
 
 def api_result(outcome):
-    """The API reply: decision, reply and citations only. Never the request text."""
+    """The API reply: decision, reply, citations and staged only. Never the request text."""
     return ApiReply(
         decision=outcome["decision"],
         reply=outcome["draft_response"],

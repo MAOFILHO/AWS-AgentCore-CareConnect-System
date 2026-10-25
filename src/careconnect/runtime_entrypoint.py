@@ -5,7 +5,7 @@ from careconnect.supervisor import ESCALATION_FAILED_NOTICE
 
 
 def invoke(payload):
-    """Payload {"prompt": <request text>} -> {decision, reply, citations}."""
+    """Payload {"prompt": <request text>} -> {decision, reply, citations, staged}."""
     request = payload.get("prompt") if isinstance(payload, dict) else None
     if not isinstance(request, str) or not request.strip():  # fail closed
         return api_result({"decision": "escalate", "draft_response": ESCALATION_FAILED_NOTICE})

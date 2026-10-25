@@ -46,6 +46,32 @@ class RuntimeEntrypointTest(unittest.TestCase):
         out = self.invoke("visiting hours", budgets=Budgets(max_steps=1, max_cost_usd=0.05, max_seconds=30))
         self.assertEqual((out["decision"], out["reply"]), ("stop", BUDGET_MESSAGE))
 
+    def test_staged_refill_sets_staged(self):
+        staged = {"status": "awaiting_approval", "submitted": False}
+        messages = [
+            {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "name": "tools___stage_refill_request"}}]},
+            {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "status": "success", "content": [{"json": staged}]}}]},
+        ]
+        agent = mock.Mock(messages=messages, return_value="done")
+        mcp = mock.MagicMock()
+        mcp.__enter__.return_value.list_tools_sync.return_value = []
+        task = mock.Mock(SYSTEM_PROMPT="p", get_mcp_client=mock.Mock(return_value=mcp))
+        strands = mock.Mock(Agent=mock.Mock(return_value=agent))
+        with mock.patch.dict(sys.modules, {"careconnect.agents.task_tool_agent": task, "strands": strands}), \
+                mock.patch.object(supervisor_agent, "load_supervisor_model", return_value=None), \
+                mock.patch.dict("os.environ", {"CARECONNECT_GATEWAY_URL": "gw"}):
+            real = supervisor_agent.supervisor_flow
+            flow = lambda request: real(request, cost_meter=FakeCostMeter())
+            with mock.patch.object(runtime_entrypoint, "supervisor_flow", flow):
+                out = runtime_entrypoint.invoke({"prompt": "Please refill my Metformin"})
+            self.assertEqual((out["decision"], out["staged"]), ("allow", True))
+            self.assertNotIn("Metformin", str(out))
+            agent.messages = []  # no staging call: nothing is staged
+            with mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
+                    mock.patch.object(runtime_entrypoint, "supervisor_flow", flow):
+                out = runtime_entrypoint.invoke({"prompt": "Please refill my Metformin"})
+            self.assertIs(out["staged"], False)
+
     def test_missing_or_empty_request_escalates_without_calling_flow(self):
         for payload in ({}, {"prompt": ""}, {"prompt": "   "}, {"prompt": None}, {"prompt": 5}, None, "x"):
             with self.subTest(payload=payload), \

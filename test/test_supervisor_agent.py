@@ -30,7 +30,7 @@ class DeployableSupervisorTest(unittest.TestCase):
     def api(self, text, **kw):
         return supervisor_agent.api_result(self.flow(text, **kw))
 
-    def test_api_allow_has_only_decision_reply_citations(self):
+    def test_api_allow_has_only_reply_fields(self):
         out = self.api("visiting hours")
         self.assertEqual(set(out), {"decision", "reply", "citations", "staged"})
         self.assertEqual(out["decision"], "allow")
