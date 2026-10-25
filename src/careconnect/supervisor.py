@@ -53,7 +53,7 @@ def supervisor_flow(
         _log_outcome(request_id, "unknown", "error")
         raise
     _log_outcome(request_id, out["decision"], _outcome_label(out))
-    return out
+    return {**out, "reply": mask_pii(out["reply"])}
 
 
 def _flow(

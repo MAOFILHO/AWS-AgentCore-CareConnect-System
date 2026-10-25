@@ -165,6 +165,13 @@ GOLDEN_SCENARIOS = [
         "log_excludes": ["Quillfeather", "double my dose"],
     },
     {
+        "name": "phone number is masked in the ticket and never logged",
+        "request": "should I double my dose, call me on 555-123-4567",
+        "decision": "escalate",
+        "log_excludes": ["555-123-4567"],
+        "ticket_text": "should I double my dose, call me on [PHONE]",
+    },
+    {
         "name": "cost protection stops a request over the cost limit",
         "request": "visiting hours",
         "decision": "stop",
@@ -220,6 +227,8 @@ class GoldenScenarioTest(unittest.TestCase):
                     self.assertNotIn(bad, out["reply"].lower())
                 self.assertEqual(len(tickets.tickets), 1 if scenario["decision"] == "escalate" else 0)
                 self.assertEqual(len(workflow.started), len(tickets.tickets))
+                if "ticket_text" in scenario:
+                    self.assertEqual(tickets.tickets[0]["text"], scenario["ticket_text"])
                 if "reason" in scenario:
                     self.assertEqual(tickets.tickets[0]["reason"], scenario["reason"])
 

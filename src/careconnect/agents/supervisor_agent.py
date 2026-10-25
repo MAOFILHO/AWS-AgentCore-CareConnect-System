@@ -221,7 +221,7 @@ def escalation_notice(request):
 def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
     state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
     request_id = str(uuid.uuid4())
-    outcome = {"request_id": request_id, "request": request, "plan": [], "verification": {"verification_status": "n/a"}}
+    outcome = {"request_id": request_id, "request": mask_pii(request), "plan": [], "verification": {"verification_status": "n/a"}}
     try:
         safety = check_safety(request, state)
         outcome["safety"] = safety
@@ -261,7 +261,7 @@ def api_result(outcome):
     """The API reply: decision, reply and citations only. Never the request text."""
     return ApiReply(
         decision=outcome["decision"],
-        reply=outcome["draft_response"],
+        reply=mask_pii(outcome["draft_response"]),
         citations=outcome.get("citations", []),
     ).model_dump()
 

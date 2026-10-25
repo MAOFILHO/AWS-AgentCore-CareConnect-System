@@ -37,6 +37,16 @@ class DeployableSupervisorTest(unittest.TestCase):
         self.assertEqual(out["citations"], ["s3://docs/approved/visiting.md"])
         self.assertNotIn("visiting hours", str(out))
 
+    def test_api_reply_and_outcome_request_are_masked(self):
+        passages = "Call 555-123-4567 or jo@example.com.\nSource:\ns3://docs/approved/visiting.md"
+        raw = self.flow("visiting hours, my SSN is 123-45-6789", passages=passages)
+        self.assertEqual(raw["request"], "visiting hours, my SSN is [SSN]")
+        out = supervisor_agent.api_result(raw)
+        self.assertIn("[PHONE]", out["reply"])
+        self.assertIn("[EMAIL]", out["reply"])
+        self.assertNotIn("555-123-4567", out["reply"])
+        self.assertNotIn("jo@example.com", out["reply"])
+
     def test_evidence_without_approved_source_escalates(self):
         for passages in ("Visiting hours are 11:00-20:00.", "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/evaluation-untrusted/x.md"):
             out = self.api("visiting hours", passages=passages)
