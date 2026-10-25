@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Merge one factory PR once every check is green. A human runs it; agents never do.
+# Merge one factory PR once every check is green. The owner or an agent in a session the owner started runs it; the factory builder and reviewer never do.
 #   bash .sandcastle/merge.sh <pr-number>
 set -euo pipefail
 
