@@ -3,7 +3,7 @@ export const REQUIRED_CHECKS = [
   "tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review",
 ];
 
-// Files a human must merge: patient-safety code, the release gate, dependencies, workflows and approved documents.
+// Files the Action never merges (`factory run` may, unless a control file changes): patient-safety code, the release gate, dependencies, workflows and approved documents.
 // Any new module on the request path must be added here, because top-level src/careconnect/*.py is allowed.
 // A protected PR that imports a new careconnect module must have that module reviewed, or add it here in the same PR.
 // api_reply.py is on the request path but is allowed on purpose (issue #80). Moving it into PROTECTED, or out of it, needs a REVIEW.md note in the same PR.

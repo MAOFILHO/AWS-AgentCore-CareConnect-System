@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
 import { priorFindings } from "./prior-findings.js";
-import { nextStep, findingsComment } from "./drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts } from "./drive-policy.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -297,38 +297,50 @@ const MAX_ATTEMPTS = Number(process.env.FACTORY_MAX_ATTEMPTS ?? 3);
 const WAIT_MS = 30_000;
 const MAX_WAIT_MS = 20 * 60_000;
 let again = false;
+const me = gh("api", "user", "-q", ".login");
 for (const r of results.filter((x) => x.pr)) {
   const pr = r.pr!.split("/").pop()!;
   const attempts = () =>
-    (JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")) as { body?: string }[]).filter((c) =>
-      (c.body ?? "").startsWith("Factory: review round")).length + 1;
-  for (let waited = 0; ; waited += WAIT_MS) {
-    const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments"));
-    const checks = JSON.parse(execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }).trim() || "[]");
-    const step = nextStep({
-      checks, attempts: attempts(), maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
-      needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
-    });
-    if (step.action === "wait" && waited < MAX_WAIT_MS) { await new Promise((ok) => setTimeout(ok, WAIT_MS)); continue; }
-    if (step.action === "merge") {
-      execFileSync("bash", [".sandcastle/merge.sh", pr], { stdio: "inherit" });
-      log(`#${r.id}`, `merged PR ${pr}`);
-      again = true;
-    } else if (step.action === "rebuild") {
-      const review = (view.comments as { body: string }[]).filter((c) => c.body.includes("<!-- factory-review -->")).at(-1)?.body ?? step.reason;
-      gh("issue", "comment", r.id, "--body", findingsComment(Number(pr), r.branch, `${step.reason}\n\n${review}`));
-      log(`#${r.id}`, `back to build: ${step.reason}`);
-      again = true;
-    } else {
-      gh("issue", "edit", r.id, "--add-label", "needs-human");
-      gh("pr", "edit", pr, "--add-label", "needs-human");
-      log(`#${r.id}`, `stopped: ${step.reason}`);
+    countDriveAttempts(JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")), me) + 1;
+  try {
+    for (let waited = 0; ; waited += WAIT_MS) {
+      const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments,files"));
+      const checks = JSON.parse(execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }).trim() || "[]");
+      const step = nextStep({
+        checks, attempts: attempts(), maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
+        needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
+        files: view.files.map((f: { path: string }) => f.path),
+      });
+      if (step.action === "wait") {
+        if (waited >= MAX_WAIT_MS) { log(`#${r.id}`, "checks still running after 20 minutes; leaving the PR for the next run"); break; }
+        await new Promise((ok) => setTimeout(ok, WAIT_MS));
+        continue;
+      }
+      if (step.action === "merge") {
+        execFileSync("bash", [".sandcastle/merge.sh", pr], { stdio: "inherit" });
+        log(`#${r.id}`, `merged PR ${pr}`);
+        again = true;
+      } else if (step.action === "rebuild") {
+        const review = (view.comments as { body: string }[]).filter((c) => c.body.includes("<!-- factory-review -->")).at(-1)?.body ?? step.reason;
+        gh("issue", "comment", r.id, "--body", findingsComment(attempts(), Number(pr), r.branch, `${step.reason}\n\n${review}`));
+        log(`#${r.id}`, `back to build: ${step.reason}`);
+        again = true;
+      } else if (step.action === "hold") {
+        log(`#${r.id}`, `held: ${step.reason}`);
+      } else {
+        gh("issue", "edit", r.id, "--add-label", "needs-human");
+        gh("pr", "edit", pr, "--add-label", "needs-human");
+        log(`#${r.id}`, `stopped: ${step.reason}`);
+      }
+      break;
     }
-    break;
+  } catch (err) {
+    log(`#${r.id}`, `drive failed: ${(err as Error).message}`);
   }
 }
 const wave = Number(process.env.FACTORY_WAVE ?? 1);
-if (again && wave < Number(process.env.FACTORY_MAX_WAVES ?? 10)) {
+const onMain = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim() === "main";
+if (again && onMain && wave < Number(process.env.FACTORY_MAX_WAVES ?? 10)) {
   execFileSync("git", ["pull", "--ff-only", "origin", "main"], { stdio: "inherit" });
   execFileSync("npx", ["tsx", ".sandcastle/main.ts"], { stdio: "inherit", env: { ...process.env, FACTORY_WAVE: String(wave + 1) } });
 }

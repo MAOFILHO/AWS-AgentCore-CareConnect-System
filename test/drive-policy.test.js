@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextStep, findingsComment } from "../.sandcastle/drive-policy.js";
-
-const REQ = ["tests-typecheck-lint", "semgrep", "gitleaks", "ai-code-review", "ai-security-review"];
+import { nextStep, findingsComment, countDriveAttempts, touchesControl } from "../.sandcastle/drive-policy.js";
+import { REQUIRED_CHECKS as REQ } from "../.sandcastle/auto-merge.js";
 const all = (bucket) => REQ.map((name) => ({ name, bucket }));
-const base = { checks: all("pass"), attempts: 1, maxAttempts: 3, draft: false, needsHuman: false };
+const base = { checks: all("pass"), attempts: 1, maxAttempts: 3, draft: false, needsHuman: false, files: ["src/careconnect/safety_gate.py"] };
 
 test("all green merges", () => assert.equal(nextStep(base).action, "merge"));
 
@@ -30,6 +29,27 @@ test("needs-human or draft never merges", () => {
   assert.equal(nextStep({ ...base, draft: true }).action, "rebuild");
 });
 
-test("findings comment starts with the prior-findings marker", () => {
-  assert.match(findingsComment(87, "sandcastle/issue-86", "body"), /^Factory: review round/);
+test("a PR that changes the factory control files is held, never merged", () => {
+  assert.equal(nextStep({ ...base, files: [".sandcastle/main.ts"] }).action, "hold");
+  assert.equal(nextStep({ ...base, files: ["AGENTS.md"] }).action, "hold");
+  assert.equal(nextStep({ ...base, files: ["package.json"] }).action, "hold");
+});
+
+test("touchesControl ignores ordinary and safety code", () => {
+  assert.equal(touchesControl(["src/careconnect/agents/supervisor_agent.py", "test/test_golden.py"]), false);
+  assert.equal(touchesControl([".github/workflows/factory-ci.yml"]), true);
+});
+
+test("findings comment starts with the drive marker and names the round and the PR", () => {
+  const c = findingsComment(2, 87, "sandcastle/issue-86", "body");
+  assert.match(c, /^Factory: drive attempt 2 \(PR #87\)/);
+});
+
+test("only the factory's own drive comments count as attempts", () => {
+  const cs = [
+    { author: { login: "bot" }, body: "Factory: drive attempt 1 (PR #87)" },
+    { author: { login: "bot" }, body: "Factory: review round 1 left findings open" },
+    { author: { login: "someone" }, body: "Factory: drive attempt 1 (PR #9)" },
+  ];
+  assert.equal(countDriveAttempts(cs, "bot"), 1);
 });
