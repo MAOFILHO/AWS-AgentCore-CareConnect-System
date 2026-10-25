@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextStep, findingsComment, countDriveAttempts, touchesControl, trustedReview } from "../.sandcastle/drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts, touchesControl, trustedReview, changedPaths } from "../.sandcastle/drive-policy.js";
 import { REQUIRED_CHECKS as REQ } from "../.sandcastle/auto-merge.js";
 const all = (bucket) => REQ.map((name) => ({ name, bucket }));
-const base = { checks: all("pass"), attempts: 1, maxAttempts: 3, draft: false, needsHuman: false, files: [{ path: "src/careconnect/safety_gate.py", deletions: 4 }] };
+const base = { checks: all("pass"), attempts: 1, maxAttempts: 3, draft: false, needsHuman: false, files: ["src/careconnect/safety_gate.py"] };
 
 test("all green merges", () => assert.equal(nextStep(base).action, "merge"));
 
@@ -30,14 +30,14 @@ test("needs-human or draft never merges", () => {
 });
 
 test("a PR that changes the factory control files is held, never merged", () => {
-  assert.equal(nextStep({ ...base, files: [{ path: ".sandcastle/main.ts", deletions: 0 }] }).action, "hold");
-  assert.equal(nextStep({ ...base, files: [{ path: "AGENTS.md", deletions: 0 }] }).action, "hold");
-  assert.equal(nextStep({ ...base, files: [{ path: "package.json", deletions: 0 }] }).action, "hold");
+  assert.equal(nextStep({ ...base, files: [".sandcastle/main.ts"] }).action, "hold");
+  assert.equal(nextStep({ ...base, files: ["AGENTS.md"] }).action, "hold");
+  assert.equal(nextStep({ ...base, files: ["package.json"] }).action, "hold");
 });
 
 test("touchesControl ignores ordinary and safety code", () => {
-  assert.equal(touchesControl([{ path: "src/careconnect/agents/supervisor_agent.py", deletions: 9 }, { path: "test/test_golden.py", deletions: 0 }]), false);
-  assert.equal(touchesControl([{ path: ".github/workflows/factory-ci.yml", deletions: 0 }]), true);
+  assert.equal(touchesControl(["src/careconnect/agents/supervisor_agent.py", "src/frontend/chat.js"]), false);
+  assert.equal(touchesControl([".github/workflows/factory-ci.yml"]), true);
 });
 
 test("findings comment starts with the drive marker and names the round and the PR", () => {
@@ -63,13 +63,22 @@ test("only factory-review comments from the Actions bot are trusted", () => {
   assert.equal(trustedReview([cs[0]]), "");
 });
 
-test("a safety test may gain lines but never lose any", () => {
-  assert.equal(touchesControl([{ path: "test/test_golden.py", deletions: 0 }]), false);
-  assert.equal(touchesControl([{ path: "test/test_safety_gate.py", deletions: 1 }]), true);
-  assert.equal(touchesControl([{ path: "test/drive-policy.test.js", deletions: 1 }]), true);
+test("any change to a protected test is held, even an added line", () => {
+  for (const f of ["test/test_golden.py", "test/test_safety_gate.py", "test/test_gateway.py", "test/test_proxy_lambda.py", "test/drive-policy.test.js"])
+    assert.equal(touchesControl([f]), true, f);
+});
+
+test("a rename counts both paths", () => {
+  assert.deepEqual(changedPaths([{ filename: "test/safety_cases.py", previous_filename: "test/test_safety_gate.py" }, { filename: "a.py" }]),
+    ["test/safety_cases.py", "test/test_safety_gate.py", "a.py"]);
+  assert.equal(touchesControl(changedPaths([{ filename: "test/safety_cases.py", previous_filename: "test/test_safety_gate.py" }])), true);
+});
+
+test("a non-required check still running makes the PR wait", () => {
+  assert.equal(nextStep({ ...base, checks: [...all("pass"), { name: "extra", bucket: "pending" }] }).action, "wait");
 });
 
 test("approved documents and infra always wait for a human", () => {
-  assert.equal(touchesControl([{ path: "infra/main.tf", deletions: 0 }]), true);
-  assert.equal(touchesControl([{ path: "Docs/Repo/careconnect-approved-docs/refills.md", deletions: 0 }]), true);
+  assert.equal(touchesControl(["infra/main.tf"]), true);
+  assert.equal(touchesControl(["Docs/Repo/careconnect-approved-docs/refills.md"]), true);
 });

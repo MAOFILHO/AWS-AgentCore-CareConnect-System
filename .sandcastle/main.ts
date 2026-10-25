@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { isHumanGate } from "./auto-merge.js";
 import { priorFindings } from "./prior-findings.js";
-import { nextStep, findingsComment, countDriveAttempts, trustedReview } from "./drive-policy.js";
+import { nextStep, findingsComment, countDriveAttempts, trustedReview, changedPaths } from "./drive-policy.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (overridable with env vars; defaults come from ~/.factory/config)
@@ -305,7 +305,7 @@ for (const r of results.filter((x) => x.pr)) {
   try {
     const attemptNo = attempts();
     for (let waited = 0; ; waited += WAIT_MS) {
-      const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments,files"));
+      const view = JSON.parse(gh("pr", "view", pr, "--json", "isDraft,labels,comments"));
       // gh pr checks exits non-zero while a check is pending or failed, but still prints the JSON on stdout.
       let out = "";
       try { out = execFileSync("gh", ["pr", "checks", pr, "--json", "name,bucket"], { encoding: "utf8" }); }
@@ -314,7 +314,7 @@ for (const r of results.filter((x) => x.pr)) {
       const step = nextStep({
         checks, attempts: attemptNo, maxAttempts: MAX_ATTEMPTS, draft: view.isDraft,
         needsHuman: view.labels.some((l: { name: string }) => l.name === "needs-human"),
-        files: view.files,
+        files: changedPaths(JSON.parse(gh("api", "--paginate", "--slurp", `repos/${REPO}/pulls/${pr}/files`)).flat()),
       });
       if (step.action === "wait") {
         if (waited >= MAX_WAIT_MS) { log(`#${r.id}`, "checks still running after 20 minutes; leaving the PR for the next run"); break; }
@@ -327,12 +327,16 @@ for (const r of results.filter((x) => x.pr)) {
         again = true;
       } else if (step.action === "rebuild") {
         // Keep the in-container findings too: priorFindings reads only the newest factory comment.
-        const inContainer = priorFindings(JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")), me);
+        const inContainer = (JSON.parse(gh("issue", "view", r.id, "--json", "comments", "-q", ".comments")) as { author?: { login?: string }; body?: string }[])
+          .filter((c) => c.author?.login === me && (c.body ?? "").startsWith("Factory: review round")).at(-1)?.body ?? "";
         const review = [trustedReview(view.comments), inContainer].filter(Boolean).join("\n\n") || step.reason;
         gh("issue", "comment", r.id, "--body", findingsComment(attemptNo, Number(pr), r.branch, `${step.reason}\n\n${review}`));
         log(`#${r.id}`, `back to build: ${step.reason}`);
         again = true;
       } else if (step.action === "hold") {
+        // Label the issue so the planner skips it; a held PR is not rebuilt in every later wave.
+        gh("issue", "edit", r.id, "--add-label", "needs-human");
+        gh("pr", "edit", pr, "--add-label", "protected-paths");
         log(`#${r.id}`, `held: ${step.reason}`);
       } else {
         gh("issue", "edit", r.id, "--add-label", "needs-human");
