@@ -153,7 +153,8 @@ def refill_was_staged(messages):
     staging_calls = {
         block["toolUse"]["toolUseId"]
         for m in messages for block in m.get("content", [])
-        if isinstance(block, dict) and tool_short_name(block.get("toolUse", {}).get("name", "")) == "stage_refill_request"
+        if isinstance(block, dict) and block.get("toolUse", {}).get("toolUseId")
+        and tool_short_name(block.get("toolUse", {}).get("name", "")) == "stage_refill_request"
     }
     for m in messages:
         for block in m.get("content", []):
@@ -320,8 +321,14 @@ def staged_reply(request, results, evidence, state):
     if "retrieval" in results and evidence.strip():
         info = "Approved Riverside Health information:\n" + evidence
         sources = approved_sources(evidence)
-        if sources and verify_response(info, evidence, state).get("verification_status") == "PASS":
-            reply, citations = info + "\n\n" + STAGED_NOTICE, sources
+        try:  # the refill is already staged: no failure here may hide that
+            passed = bool(sources) and verify_response(info, evidence, state).get("verification_status") == "PASS"
+            if passed:
+                reply, citations = info + "\n\n" + STAGED_NOTICE, sources
+            else:
+                reply += " " + escalation_notice(request)  # opens the ticket, as on the normal path
+        except Exception:  # includes BudgetExceeded
+            reply, citations = STAGED_NOTICE, []
     if any(k in request.lower() for k in OPERATIONAL_KEYWORDS):
         reply += " " + OTHER_REQUEST_NOTICE
     return {"decision": "allow", "draft_response": reply, "staged": True, "citations": citations}

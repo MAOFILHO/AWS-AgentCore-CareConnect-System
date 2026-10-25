@@ -86,12 +86,21 @@ class DeployableSupervisorTest(unittest.TestCase):
         self.assertEqual((out["staged"], out["citations"]), (True, ["s3://docs/approved/visiting.md"]))
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
             out = self.flow("What are the visiting hours? Also refill my Metformin", status="FAIL")
-        self.assertEqual((out["draft_response"], out["citations"]), (supervisor_agent.STAGED_NOTICE, []))
+        self.assertTrue(out["draft_response"].startswith(supervisor_agent.STAGED_NOTICE))
+        self.assertIn(ESCALATION_NOTICE, out["draft_response"])
+        self.assertEqual((out["staged"], out["citations"]), (True, []))
         with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
             out = self.flow("Please reschedule my appointment and refill my Metformin")
         self.assertIn(supervisor_agent.STAGED_NOTICE, out["draft_response"])
         self.assertNotIn("free text", out["draft_response"])
         self.assertIn(supervisor_agent.OTHER_REQUEST_NOTICE, out["draft_response"])
+
+    def test_staged_reply_survives_verification_budget_error(self):
+        task = {"reply": "free text", "staged": True}
+        with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task), \
+                mock.patch.object(supervisor_agent, "verify_response", side_effect=supervisor_agent.BudgetExceeded("x")):
+            out = self.flow("What are the visiting hours? Also refill my Metformin")
+        self.assertEqual((out["draft_response"], out["staged"]), (supervisor_agent.STAGED_NOTICE, True))
 
     def test_multi_intent_refill_keeps_retrieval_and_task(self):
         plan = supervisor_agent.create_plan("What are the visiting hours? Also refill my Metformin",
