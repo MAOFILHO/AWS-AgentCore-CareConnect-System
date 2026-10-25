@@ -42,9 +42,9 @@ from careconnect.api_reply import ApiReply
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
 )
-from careconnect.gateway import StagedRefillResult
+from careconnect.gateway import StagedRefillToolReply
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
-from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE
+from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
@@ -78,6 +78,11 @@ INFORMATIONAL_KEYWORDS = [
     "appointment", "book", "hours",
 ]
 OPERATIONAL_KEYWORDS = ["reschedule", "cancel booking"]
+REFILL_QUESTION_MARKERS = ["how do i", "how to", "policy", "process"]
+
+
+def is_refill_action(lowered):
+    return bool(REFILL_REQUEST.search(lowered)) and not any(m in lowered for m in REFILL_QUESTION_MARKERS)
 
 
 def create_plan(request, safety, state):
@@ -86,6 +91,10 @@ def create_plan(request, safety, state):
     plan = []
     if safety["clinical_detected"]:  # fail closed: escalate only, no retrieval
         return [{"task": "Medication / clinical decision", "agent": "escalation"}]
+    if is_refill_action(lowered):  # a real refill action: the task agent alone stages it
+        plan.append({"task": "Stage refill request", "agent": "task"})
+        print(f"     - {plan[0]['task']} -> task agent")
+        return plan
     if any(k in lowered for k in INFORMATIONAL_KEYWORDS):
         plan.append({"task": "Retrieve approved information", "agent": "retrieval"})
     if any(k in lowered for k in OPERATIONAL_KEYWORDS):
@@ -122,12 +131,17 @@ def split_passages(text):
     return [c for b in blocks for c in re.findall(r"(?s).*?^Source:[ \t]*\n\S+", b, flags=re.MULTILINE)]
 
 
+def tool_short_name(name):
+    """Gateway tool names are '<target>___<tool>'."""
+    return name.split("___")[-1]
+
+
 def refill_was_staged(messages):
     """True only if a stage_refill_request tool call returned awaiting_approval, not submitted."""
     staging_calls = {
         block["toolUse"]["toolUseId"]
         for m in messages for block in m.get("content", [])
-        if isinstance(block, dict) and block.get("toolUse", {}).get("name", "").split("___")[-1] == "stage_refill_request"
+        if isinstance(block, dict) and tool_short_name(block.get("toolUse", {}).get("name", "")) == "stage_refill_request"
     }
     for m in messages:
         for block in m.get("content", []):
@@ -137,10 +151,10 @@ def refill_was_staged(messages):
             for part in result.get("content", []):
                 try:
                     if "json" in part:
-                        StagedRefillResult.model_validate(part["json"])
+                        StagedRefillToolReply.model_validate(part["json"], strict=True)
                     else:
-                        StagedRefillResult.model_validate_json(part["text"])
-                except (ValidationError, KeyError):
+                        StagedRefillToolReply.model_validate_json(part["text"], strict=True)
+                except (ValidationError, KeyError, TypeError):
                     continue
                 return True
     return False

@@ -1,4 +1,4 @@
-"""In-memory fakes for the Knowledge Base and the escalation ticket store."""
+"""In-memory fakes for the Knowledge Base, the escalation ticket store, the Gateway MCP client and the Task/Tool Agent."""
 
 import re
 

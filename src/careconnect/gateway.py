@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AppointmentStatus(BaseModel):
@@ -12,16 +12,17 @@ class AppointmentStatus(BaseModel):
     appointment_reference: str
 
 
-class StagedRefillResult(BaseModel):
-    """What the Gateway's stage_refill_request tool returns."""
-    action: Literal["submit_refill"] = "submit_refill"
+class StagedRefillToolReply(BaseModel):
+    """What the Gateway's stage_refill_request tool returns; every field is required."""
+    model_config = ConfigDict(strict=True)
+    action: Literal["submit_refill"]
     drug: str
-    status: Literal["awaiting_approval"] = "awaiting_approval"
+    status: Literal["awaiting_approval"]
     idempotency_key: str
-    submitted: Literal[False] = False
+    submitted: Literal[False]
 
 
-class StagedRefill(StagedRefillResult):
+class StagedRefill(StagedRefillToolReply):
     patient_reference: str
 
 
@@ -39,4 +40,7 @@ class FakeGateway:
     def stage_refill_request(self, patient_reference, drug, idempotency_key=None):
         if not idempotency_key or not idempotency_key.strip():
             raise ValueError("idempotency_key is required")
-        return StagedRefill(patient_reference=patient_reference, drug=drug, idempotency_key=idempotency_key)
+        return StagedRefill(
+            patient_reference=patient_reference, drug=drug, idempotency_key=idempotency_key,
+            action="submit_refill", status="awaiting_approval", submitted=False,
+        )

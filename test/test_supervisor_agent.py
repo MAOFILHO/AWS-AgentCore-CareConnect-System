@@ -60,6 +60,11 @@ class DeployableSupervisorTest(unittest.TestCase):
             plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
             self.assertEqual([p["agent"] for p in plan], ["retrieval"])
 
+    def test_refill_action_routes_to_task_agent(self):
+        for text in ("Please refill my Metformin", "Refill my inhaler please", "I need a refill of Metformin"):
+            plan = supervisor_agent.create_plan(text, {"clinical_detected": False}, mock.MagicMock())
+            self.assertEqual([p["agent"] for p in plan], ["task"])
+
     def test_api_result_carries_staged(self):
         base = {"decision": "allow", "draft_response": "ok"}
         self.assertIs(supervisor_agent.api_result(base)["staged"], False)

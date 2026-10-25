@@ -48,7 +48,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
         out = self.invoke("visiting hours", budgets=Budgets(max_steps=1, max_cost_usd=0.05, max_seconds=30))
         self.assertEqual((out["decision"], out["reply"]), ("stop", BUDGET_MESSAGE))
 
-    def run_task_flow(self, messages, prompt="Please reschedule my appointment and refill my Metformin"):
+    def run_task_flow(self, messages):
         task = types.SimpleNamespace(SYSTEM_PROMPT="p", get_mcp_client=FakeMcpClient)
         strands = types.SimpleNamespace(Agent=lambda **kw: FakeTaskAgent(messages))
         real = supervisor_agent.supervisor_flow
@@ -58,7 +58,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
                 mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
                 mock.patch.object(runtime_entrypoint, "supervisor_flow", flow), \
                 mock.patch.dict("os.environ", {"CARECONNECT_GATEWAY_URL": "gw"}):
-            return runtime_entrypoint.invoke({"prompt": prompt})
+            return runtime_entrypoint.invoke({"prompt": "Please refill my Metformin"})
 
     def staging_messages(self, content):
         return [
