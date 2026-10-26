@@ -16,6 +16,12 @@ class FakeKnowledgeBase:
             if words & set((name + " " + text).lower().replace("-", " ").split())
         ]
 
+    def search(self, query):
+        return [
+            {"content": {"text": text}, "location": {"s3Location": {"uri": name}}, "score": 1.0}
+            for name, text in self.retrieve(query)
+        ]
+
 
 class FakeEscalationTicketStore:
     def __init__(self):
