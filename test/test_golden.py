@@ -388,7 +388,7 @@ class PiiInReplyGoldenTest(unittest.TestCase):
                 mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
                 mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
                 mock.patch("builtins.open", mock.mock_open(read_data="")):
-            out = supervisor_agent.supervisor_flow("visiting hours", cost_meter=FakeCostMeter())
+            out = supervisor_agent.supervisor_flow("how do I call the ward", cost_meter=FakeCostMeter())
         self.assertEqual(out["decision"], "allow")
         self.assertIn("[PHONE]", out["draft_response"])
         self.assertNotIn("555-123-4567", out["draft_response"])

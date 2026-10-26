@@ -84,3 +84,11 @@ class VerificationGateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DraftSentenceAbsentFromEvidenceTest(unittest.TestCase):
+    def test_a_sentence_the_passage_does_not_contain_fails_grounding(self):
+        passages = {"v.md": "Visiting hours are 11:00-20:00."}
+        draft = "Visiting hours are 11:00-20:00.\nVisitors may bring flowers."
+        result = verify("visiting hours", draft, ["v.md"], passages, FakeGrounding(), FakeGuardrail(), FakeRelevance())
+        self.assertEqual((result.status, result.reason), ("FAIL", "grounding"))

@@ -2,12 +2,20 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from careconnect.agents import supervisor_agent
 from careconnect.budget import BUDGET_MESSAGE, Budgets, load_budgets
 from careconnect.fakes import FakeCostMeter
 from careconnect.supervisor import ESCALATION_NOTICE
+
+APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"
+
+
+def approved_passage(name):
+    return (APPROVED / name).read_text() + "\nSource:\ns3://docs/approved/" + name
+
 
 PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
 
@@ -54,6 +62,32 @@ class DeployableSupervisorTest(unittest.TestCase):
         self.assertIn("11:00", first)
         self.assertIn("Parking is free", second)
         self.assertNotIn("11:00", second)
+
+    def test_reply_quotes_only_the_parking_sentences_and_keeps_the_citation(self):
+        out = self.api("Where can I park", passages=approved_passage("facilities-parking-wayfinding.md"))
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("multi-storey car park", out["reply"])
+        self.assertNotIn("prayer", out["reply"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/facilities-parking-wayfinding.md"])
+        self.assertIn("s3://docs/approved/facilities-parking-wayfinding.md", out["reply"])
+
+    def test_reply_quotes_only_the_maternity_visiting_sentences(self):
+        out = self.api("What are the visiting rules for maternity?", passages=approved_passage("visiting-hours-and-policy.md"))
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("birth partner", out["reply"])
+        self.assertNotIn("ICU", out["reply"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/visiting-hours-and-policy.md"])
+
+    def test_verification_still_gets_the_whole_passage_as_evidence(self):
+        passage = approved_passage("facilities-parking-wayfinding.md")
+        self.flow("Where can I park", passages=passage)
+        self.assertEqual(self.verify.call_args.args[2], passage.strip())
+
+    def test_no_sentence_answers_the_request_escalates(self):
+        out = self.api("Where can I park", passages="Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md")
+        self.assertEqual((out["decision"], out["citations"]), ("escalate", []))
+        self.assertNotIn("11:00", out["reply"])
+        self.escalate.assert_called_once()
 
     def test_api_allow_has_only_reply_fields(self):
         out = self.api("visiting hours")
