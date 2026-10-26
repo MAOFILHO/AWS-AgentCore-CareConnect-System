@@ -5,7 +5,9 @@ Description: >
   aws cloudformation deploy --stack-name careconnect-gateway --region us-east-1
   --template-file infra/careconnect-gateway.yaml --capabilities CAPABILITY_IAM
   --parameter-overrides ToolsFunctionArn=<ToolsFunctionArn output of the Lambda stack>.
-  The GatewayUrl output is CARECONNECT_GATEWAY_URL. Delete with 'aws cloudformation delete-stack'.
+  The GatewayUrl output is CARECONNECT_GATEWAY_URL. Print the URL and ID with 'aws cloudformation
+  describe-stacks --stack-name careconnect-gateway --query Stacks[0].Outputs'.
+  Delete with 'aws cloudformation delete-stack'.
 
 Parameters:
   ToolsFunctionArn:
@@ -86,3 +88,5 @@ Resources:
 Outputs:
   GatewayUrl:
     Value: !GetAtt Gateway.GatewayUrl
+  GatewayId:
+    Value: !GetAtt Gateway.GatewayIdentifier

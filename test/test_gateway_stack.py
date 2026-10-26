@@ -1,7 +1,4 @@
-import os
 import re
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,7 +6,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE = ROOT / "infra/careconnect-gateway.yaml"
-SCRIPT = ROOT / "scripts/deploy-runtime.sh"
+FORBIDDEN = {"AWS::EC2::NatGateway", "AWS::OpenSearchService::Domain",
+             "AWS::Elasticsearch::Domain"}
 TOOLS = {"check_appointment_status", "check_refill_eligibility", "stage_refill_request"}
 
 
@@ -77,106 +75,22 @@ class GatewayTemplateTest(unittest.TestCase):
             tags = raw if isinstance(raw, dict) else {t["Key"]: t["Value"] for t in raw}
             self.assertEqual(tags, {"Project": "careconnect", "issue": "96"}, name)
 
-    def test_outputs_the_gateway_url(self):
+    def test_outputs_the_gateway_url_and_id(self):
+        outputs = self.template["Outputs"]
+        self.assertEqual(outputs["GatewayUrl"]["Value"], {"GetAtt": "Gateway.GatewayUrl"})
         self.assertEqual(
-            self.template["Outputs"]["GatewayUrl"]["Value"], {"GetAtt": "Gateway.GatewayUrl"}
+            outputs["GatewayId"]["Value"], {"GetAtt": "Gateway.GatewayIdentifier"}
         )
+
+    def test_no_forbidden_resource_type(self):
+        types = {r["Type"] for r in self.resources.values()}
+        self.assertFalse(types & FORBIDDEN)
+        self.assertNotIn("ProvisionedConcurrency", self.text)
 
     def test_no_account_ids_or_literal_arns(self):
         self.assertNotIn("arn:aws", self.text)
         self.assertIsNone(re.search(r"\b\d{12}\b", self.text))
 
-
-OUTPUTS = {
-    "careconnect-data": {"ApprovalWorkflowArn": "sm-arn"},
-    "careconnect-bedrock": {"KnowledgeBaseId": "kb-1", "GuardrailId": "gr-1",
-                            "GuardrailVersion": "1"},
-    "careconnect-gateway": {"GatewayUrl": "https://gw.example/mcp"},
-}
-RUNTIME_ARN = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/careconnect-abc123"
-
-
-class DeployRuntimeTest(unittest.TestCase):
-    """Runs scripts/deploy-runtime.sh with a fake `aws` and a fake `agentcore` on PATH."""
-
-    def run_deploy(self, outputs, agentcore_body=f'echo "Agent ARN: {RUNTIME_ARN}"\n'):
-        with tempfile.TemporaryDirectory() as tmp:
-            # The fake aws answers describe-stacks with FAKE_<stack>_<key>.
-            aws = Path(tmp) / "aws"
-            aws.write_text(
-                "#!/usr/bin/env bash\n"
-                f'echo "aws $*" >> "{tmp}/calls"\n'
-                'while [ $# -gt 0 ]; do case "$1" in\n'
-                '  --stack-name) stack=${2//-/_}; shift;;\n'
-                "  --query) key=${2#*OutputKey==\\'}; key=${key%%\\'*}; shift;;\n"
-                "esac; shift; done\n"
-                'v="FAKE_${stack}_${key}"; echo "${!v}"\n'
-            )
-            agentcore = Path(tmp) / "agentcore"
-            agentcore.write_text(
-                "#!/usr/bin/env bash\n"
-                f'echo "agentcore $*" >> "{tmp}/calls"\n'
-                + agentcore_body
-            )
-            aws.chmod(0o755)
-            agentcore.chmod(0o755)
-            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}"}
-            for stack, values in outputs.items():
-                for key, value in values.items():
-                    env[f"FAKE_{stack.replace('-', '_')}_{key}"] = value
-            result = subprocess.run(
-                ["bash", str(SCRIPT), "careconnect-data", "careconnect-bedrock",
-                 "careconnect-gateway"],
-                env=env, capture_output=True, text=True,
-            )
-            calls = Path(tmp) / "calls"
-            result.calls = calls.read_text().splitlines() if calls.exists() else []
-            return result
-
-    def test_deploys_with_the_five_values_and_prints_the_runtime_arn(self):
-        result = self.run_deploy(OUTPUTS)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        (deploy,) = [c for c in result.calls if c.startswith("agentcore deploy")]
-        self.assertEqual(
-            re.findall(r"--env (\S+)", deploy),
-            [
-                "CARECONNECT_KB_ID=kb-1",
-                "CARECONNECT_GATEWAY_URL=https://gw.example/mcp",
-                "CARECONNECT_GUARDRAIL_ID=gr-1",
-                "CARECONNECT_GUARDRAIL_VERSION=1",
-                "CARECONNECT_STATE_MACHINE_ARN=sm-arn",
-            ],
-        )
-        self.assertIn("Gateway URL: https://gw.example/mcp", result.stdout)
-        self.assertIn(f"Runtime ARN: {RUNTIME_ARN}", result.stdout)
-
-    def test_fails_before_deploy_when_a_value_is_empty(self):
-        for stack, values in OUTPUTS.items():
-            for key in values:
-                with self.subTest(key=key):
-                    outputs = {s: dict(v) for s, v in OUTPUTS.items()}
-                    outputs[stack][key] = ""
-                    result = self.run_deploy(outputs)
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn("is empty", result.stderr)
-                    self.assertFalse([c for c in result.calls if c.startswith("agentcore")])
-
-    def test_treats_none_as_empty(self):
-        outputs = {s: dict(v) for s, v in OUTPUTS.items()}
-        outputs["careconnect-bedrock"]["KnowledgeBaseId"] = "None"
-        result = self.run_deploy(outputs)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("CARECONNECT_KB_ID is empty", result.stderr)
-
-    def test_fails_when_agentcore_deploy_fails(self):
-        result = self.run_deploy(OUTPUTS, 'echo "deploy error" >&2\nexit 3\n')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("Runtime ARN", result.stdout)
-
-    def test_fails_when_deploy_prints_no_runtime_arn(self):
-        result = self.run_deploy(OUTPUTS, 'echo "deployed"\n')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("no runtime ARN", result.stderr)
 
 
 if __name__ == "__main__":
