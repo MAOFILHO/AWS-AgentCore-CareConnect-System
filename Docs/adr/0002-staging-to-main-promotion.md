@@ -8,5 +8,6 @@ We chose a manual trigger over a schedule or a push trigger so that a promotion 
 
 - The deploy smoke test stays manual. `scripts/smoke.sh` needs a deployed API and AWS credentials, which the workflow does not have. Before merging, the owner deploys `staging` with `scripts/deploy.sh` and runs `scripts/smoke.sh <api-url>`; a failure means no merge.
 - A PR opened with the workflow's `GITHUB_TOKEN` does not start other workflows, so `factory-ci` does not run on the promotion PR at first, and `merge.sh` refuses a PR with no checks. The owner closes and reopens the PR once; that starts `factory-ci` on its head, and `merge.sh` merges only when those checks are green.
+- GitHub dispatches a workflow only from the default branch, so `promote` cannot run until `promote.yml` is on `main`. The first promotion is a `staging` to `main` PR the owner opens by hand, under the same checks and smoke test.
 - If a promotion PR is already open, the workflow does not open a second one.
 - The `factory-merge` Action never merges the promotion PR: its branch is `staging`, not `sandcastle/*`.
