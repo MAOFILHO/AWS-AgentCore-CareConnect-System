@@ -1,0 +1,43 @@
+# Promotes staging to main (Docs/adr/0002-staging-to-main-promotion.md). Started by hand.
+# Runs the AGENTS.md checks on staging, then opens one staging to main PR. It never pushes; the owner merges.
+name: promote
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: promote
+  cancel-in-progress: false
+jobs:
+  checks:
+    name: tests-typecheck-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { ref: staging, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci || npm install
+      - run: python3 -m pip install -r requirements.txt
+      - run: npm test
+      - run: PYTHONPATH=src python3 -m unittest discover -s test
+      - run: npm run typecheck --if-present
+      - run: npm run lint --if-present
+      - run: npm run build --if-present
+  open-pr:
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Open the staging to main PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          open="$(gh pr list -R "$GITHUB_REPOSITORY" --base main --head staging --state open --json url -q '.[0].url // empty')"
+          if [ -n "$open" ]; then echo "already open: $open"; exit 0; fi
+          gh pr create -R "$GITHUB_REPOSITORY" --base main --head staging --title "Promote staging to main" \
+            --body "Checks passed on staging in $RUN_URL. Before merging: close and reopen this PR to start factory-ci, and run scripts/smoke.sh against the staging deploy (Docs/adr/0002-staging-to-main-promotion.md)."
