@@ -3,6 +3,7 @@
 import re
 
 MAX_SENTENCES = 3
+MAX_CHARS = 400
 STOPWORDS = {
     "a", "an", "and", "are", "at", "can", "do", "for", "how", "i", "in", "is", "it", "me", "my",
     "of", "on", "the", "to", "what", "when", "where", "which", "who", "why", "you", "your",
@@ -21,35 +22,38 @@ def _stems(text):
     return {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower())} - STOPWORDS
 
 
-def _split_section(section):
-    """(heading, body) of one "#"-led section; a flattened heading ends where its first sentence starts."""
-    section = section.strip()
-    if not section.startswith("#"):
-        return "", section
-    section = section.lstrip("#").strip()
-    first_line, newline, rest = section.partition("\n")
-    if newline:
-        return first_line.strip(), rest
-    words = list(re.finditer(r"\S+", section))
-    for i in range(1, len(words) - 1):
-        word = words[i].group()
-        follows_question = words[i - 1].group().endswith("?")
-        starts_sentence = follows_question or re.match(r"[a-z0-9]", words[i + 1].group())
-        if word[0].isupper() and not word.endswith(",") and starts_sentence:
-            first = re.match(r"[^.!?]*[.!](?=\s|$)", section[words[i].start():])
-            if first and len(first.group().split()) >= 4:
-                return section[: words[i].start()].strip(), section[words[i].start():]
-    return section, ""
+def _chunks(piece):
+    """A flat piece in parts of at most MAX_CHARS, cut at spaces, so no text is dropped."""
+    while len(piece) > MAX_CHARS and " " in piece[:MAX_CHARS]:
+        head = piece[:MAX_CHARS].rsplit(" ", 1)[0]
+        yield head
+        piece = piece[len(head):].lstrip()
+    yield piece
 
 
 def _sentences(text):
-    """(heading, sentence) pairs in document order; each sentence is verbatim from the text."""
+    """(heading, sentence) pairs in document order; each sentence is verbatim from the text.
+
+    A "#" run starts a new section and, when the text has line breaks, the section's first line
+    is its heading. A flattened passage has no line breaks, so a heading runs into the first
+    sentence: no heading is guessed and each section is split into sentences as it stands.
+    """
+    flat = "\n" not in text.strip()
     for section in re.split(r"(?<!\S)(?=#{1,6} )", text):
-        heading, body = _split_section(section)
+        heading, body = ("", section) if flat else _heading_and_body(section)
         for line in body.splitlines():
             for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", line.strip()):
                 if sentence:
-                    yield heading, sentence
+                    for part in _chunks(sentence) if flat else [sentence]:
+                        yield heading, part
+
+
+def _heading_and_body(section):
+    section = section.strip()
+    if not section.startswith("#"):
+        return "", section
+    first_line, _, body = section.partition("\n")
+    return first_line.lstrip("#").strip(), body
 
 
 def answer_sentences(request, text):

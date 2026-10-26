@@ -51,10 +51,18 @@ class AnswerSentencesTest(unittest.TestCase):
         self.assertIn("birth partner", out)
         self.assertNotIn("ICU", out)
 
-    def test_every_flattened_approved_document_still_yields_verbatim_sentences(self):
+    def test_every_flattened_approved_document_keeps_all_the_text_of_the_original(self):
         for path in sorted(APPROVED.glob("*.md")):
-            flat = flatten(path.read_text())
-            sentences = [sentence for _, sentence in _sentences(flat)]
-            self.assertTrue(sentences, path.name)
-            for sentence in sentences:
+            text = path.read_text()
+            flat = flatten(text)
+            quoted = [sentence for _, sentence in _sentences(flat)]
+            for sentence in quoted:
                 self.assertIn(sentence, flat, path.name)
+            joined = " ".join(quoted)
+            for _, sentence in _sentences(text):
+                self.assertIn(sentence, joined, path.name)
+
+    def test_flattened_contact_directory_still_quotes_the_pharmacy_phone_number(self):
+        directory = flatten((APPROVED / "contact-directory.md").read_text())
+        out = "\n".join(answer_sentences("What is the pharmacy phone number?", directory))
+        self.assertRegex(out, r"\(555\) 010-\d{4}")
