@@ -173,6 +173,7 @@ class BudgetTest(unittest.TestCase):
             '{"max_steps": 0, "max_seconds": 30, "max_cost_usd": 0.05}',
             '{"max_steps": 8, "max_seconds": -1, "max_cost_usd": 0.05}',
             '{"max_steps": 8, "max_seconds": 30, "max_cost_usd": 0.05, "max_cost": 1}',
+            '{"max_steps": 8, "max_seconds": 30, "max_cost_usd": 0.05, "step_cost_usd": {"Retrieval Agent": -1}}',
         )
         for text in bad:
             with self.subTest(text=text), tempfile.TemporaryDirectory() as d:

@@ -40,7 +40,7 @@ from careconnect.agents.escalation_agent import escalate
 from careconnect.agents.verification_agent import get_guardrail_settings, verify
 from careconnect.api_reply import ApiReply
 from careconnect.budget import (
-    BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
+    BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, StepPriceMeter, load_budgets,
 )
 from careconnect.gateway import StagedRefillToolReply
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
@@ -267,7 +267,8 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
 
 
 def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
-    state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
+    budgets = budgets or load_budgets()
+    state = BudgetTracker(budgets, cost_meter or StepPriceMeter(budgets.step_cost_usd), clock)
     request_id = str(uuid.uuid4())
     outcome = {"request_id": request_id, "request": mask_pii(request), "plan": [], "verification": {"verification_status": "n/a"}}
     try:
