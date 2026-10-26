@@ -62,11 +62,17 @@ export function init(doc, { apiUrl, fetch }) {
   const form = doc.getElementById("chat-form");
   const input = doc.getElementById("question");
   const container = doc.getElementById("reply");
+  let pending = false;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = input.value.trim();
-    if (!question) return;
-    show(doc, container, await ask(question, { apiUrl, fetch }));
+    if (!question || pending) return;
+    pending = true;
+    try {
+      show(doc, container, await ask(question, { apiUrl, fetch }));
+    } finally {
+      pending = false;
+    }
   });
 }
 

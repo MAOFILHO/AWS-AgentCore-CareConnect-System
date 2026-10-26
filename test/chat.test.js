@@ -176,3 +176,35 @@ test("a reply in time is unchanged and clears the timer", async () => {
     mock.timers.reset();
   }
 });
+
+function chatPage(fetch) {
+  const form = el(), input = el(), box = el();
+  const doc = { createElement: el, getElementById: (id) => ({ "chat-form": form, question: input, reply: box })[id] };
+  init(doc, { apiUrl, fetch });
+  const submit = (q) => { input.value = q; return form.listeners.submit({ preventDefault() {} }); };
+  return { box, submit };
+}
+
+test("a second submit while one is pending sends no second request", async () => {
+  let calls = 0;
+  let release;
+  const fetch = () => { calls += 1; return new Promise((r) => { release = r; }); };
+  const { box, submit } = chatPage(fetch);
+  const first = submit("one");
+  await submit("two");
+  assert.equal(calls, 1);
+  release({ ok: true, json: async () => ({ decision: "allow", reply: "first answer", citations: [] }) });
+  await first;
+  assert.equal(box.children[0].textContent, "first answer");
+});
+
+test("after a reply or an error the next submit works", async () => {
+  const replies = [fakeApi(500, {}), fakeApi(200, { decision: "allow", reply: "ok", citations: [] })];
+  let calls = 0;
+  const { box, submit } = chatPage((...a) => replies[calls++](...a));
+  await submit("one");
+  assert.equal(box.children[0].textContent, ERROR_NOTICE);
+  await submit("two");
+  assert.equal(calls, 2);
+  assert.equal(box.children.at(-1).textContent, "ok");
+});
