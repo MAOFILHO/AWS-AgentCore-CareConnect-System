@@ -43,6 +43,7 @@ from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, StepPriceMeter, load_budgets,
 )
 from careconnect.gateway import StagedRefillToolReply
+from careconnect.narrowing import answer_sentences
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
 from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
@@ -204,13 +205,24 @@ def execute_required_agents(request, plan, state):
 # 4. Combine only the SAFE outputs into a patient-facing draft.
 #    Returns BOTH the draft and the evidence (raw passages) it was built from.
 # ---------------------------------------------------------------------------
-def combine_safe_results(results, safety, state):
+def narrowed_passage(request, evidence):
+    """The sentences of the passage that answer the request, then its Source line. "" if none do."""
+    match = re.search(r"(?s)\A(.*?)^Source:[ \t]*\n(\S+)", evidence, flags=re.MULTILINE)
+    sentences = answer_sentences(request, match.group(1)) if match else []
+    return "\n".join(sentences + ["Source:", match.group(2)]) if sentences else ""
+
+
+def combine_safe_results(request, results, safety, state):
     state.step("Combine safe results")
     parts = []
     evidence = ""
     if "retrieval" in results:
         evidence = results["retrieval"].get("passages", "")
-        parts.append("Approved Riverside Health information:\n" + evidence)
+        answer = narrowed_passage(request, evidence)
+        if answer:
+            parts.append("Approved Riverside Health information:\n" + answer)
+        else:  # nothing answers the request: no evidence, so the flow escalates
+            evidence = ""
     if "task" in results:
         parts.append("Operational status:\n" + results["task"]["reply"])
     if "escalation" in results:
@@ -274,7 +286,7 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         plan = create_plan(request, safety, state)
         outcome["plan"] = plan
         results = execute_required_agents(request, plan, state)
-        draft, evidence = combine_safe_results(results, safety, state)
+        draft, evidence = combine_safe_results(request, results, safety, state)
         if safety["clinical_detected"]:
             return {**outcome, "decision": "escalate", "draft_response": draft}
         if results.get("task", {}).get("staged"):  # fixed notice: never the model's free text
@@ -303,7 +315,7 @@ def staged_reply(request, results, evidence, state):
     """STAGED_NOTICE, after the verified retrieval answer if the request had one."""
     reply, citations = STAGED_NOTICE, []
     if "retrieval" in results and evidence.strip():
-        info = "Approved Riverside Health information:\n" + evidence
+        info = "Approved Riverside Health information:\n" + narrowed_passage(request, evidence)
         sources = approved_sources(evidence)
         try:  # the refill is already staged: no failure here may hide that
             passed = bool(sources) and verify_response(request, info, evidence, state).get("verification_status") == "PASS"
