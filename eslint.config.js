@@ -1,1 +1,4 @@
-export default [{ files: ["**/*.js"], rules: {} }];
+export default [
+  { ignores: [".claude/**"] },
+  { files: ["**/*.js"], rules: {} },
+];
