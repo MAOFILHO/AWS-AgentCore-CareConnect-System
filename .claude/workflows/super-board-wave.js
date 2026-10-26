@@ -125,6 +125,8 @@ const REVIEW_MEMORY = [
   `Run ponytail:ponytail-review on the merge-base diff (inline ladder if the plugin is absent); Over-engineering never blocks merge alone.`,
   // Truth-check brief is fixed (super-review → Adversarial mode); a hand-written one once made over-building blocking.
   `Truth-check sub-agents get the fixed brief from super-review → "Adversarial mode", verbatim. After collecting, reclass any Over-engineering Blocker to Should fix; it never decides merge or bounce.`,
+  // Owner rule 2026-10-26: the factory ships quality code, no AI slop.
+  `Slop is a Gap, not a style note: comments that narrate the code, dead or unused code and params, speculative options, copy-pasted blocks, tests that assert nothing. Slop in the diff bounces the PR to Build with file:line.`,
   // Merge policy + migrations live in the gate (run.md → Merge protocol step 5).
   // Waves 1 and 6 both halted (exit 79) because the draft PR was never marked ready before the gate ran.
   `Before the gate, check the PR with gh pr view --json isDraft; if it is a draft, run gh pr ready <pr> first. The gate refuses a draft and a refused merge halts the whole board.`,
