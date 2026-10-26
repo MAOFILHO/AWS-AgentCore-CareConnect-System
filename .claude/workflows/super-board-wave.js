@@ -50,6 +50,10 @@ const READ_SHAPES = [
   `- PR body+head: --kind body -- pr view <N> --json body,headRefOid`,
   `- PR metadata: --kind metadata -- pr view <N> --json files,labels,body,additions,deletions,changedFiles`,
   `- issue state: --kind state -- issue view <N> --json state --jq .state`,
+  // Wave 13 halted on --json comments,reviewThreads: reviewThreads is not a gh pr view field.
+  `- PR comments+reviews: --kind json -- pr view <N> --json comments,reviews (gh pr view has no reviewThreads field)`,
+  // PR #126 hit the 400-line gate at 600 lines because QA evidence logs rode along (code was 368).
+  `Keep QA evidence logs out of the PR diff: write them outside the branch or summarize in a PR comment. The merge gate counts every changed line against the 400 cap.`,
   `A read whose output misses its shape exits 64 for that call only and prints the valid form: fix the read, do not halt.`,
 ].join('\n')
 const READ_FAILURE = READ_SHAPES + '\n' + `Required GitHub reads use .claude/bin/super-board-github-read.py: three total attempts, exit 79 means run halted. Check --check before any GitHub write, migration, or merge. On exit 79 preserve worktree/card/approval/claims, make no more GitHub calls, and report status=halted (preflight verdict=halted). Never retry a mutation. Config: ${input.configPath}.`
@@ -121,7 +125,11 @@ const REVIEW_MEMORY = [
   `Run ponytail:ponytail-review on the merge-base diff (inline ladder if the plugin is absent); Over-engineering never blocks merge alone.`,
   // Truth-check brief is fixed (super-review → Adversarial mode); a hand-written one once made over-building blocking.
   `Truth-check sub-agents get the fixed brief from super-review → "Adversarial mode", verbatim. After collecting, reclass any Over-engineering Blocker to Should fix; it never decides merge or bounce.`,
+  // Owner rule 2026-10-26: the factory ships quality code, no AI slop.
+  `Slop is a Gap, not a style note: comments that narrate the code, dead or unused code and params, speculative options, copy-pasted blocks, tests that assert nothing. Slop in the diff bounces the PR to Build with file:line.`,
   // Merge policy + migrations live in the gate (run.md → Merge protocol step 5).
+  // Waves 1 and 6 both halted (exit 79) because the draft PR was never marked ready before the gate ran.
+  `Before the gate, check the PR with gh pr view --json isDraft; if it is a draft, run gh pr ready <pr> first. The gate refuses a draft and a refused merge halts the whole board.`,
   `Merge only via super-board-merge-gate.sh. Exit 7 = merge_policy says a human merges (money/auth/schema/size): Blocked with the 🙋 template quoting its human-gate lines; To unblock = merge it yourself, or comment done to approve.`,
   `Exit 8 = 🙋 needs you (migration for a DB the robot may not touch, failed migrate, declared human step): Blocked with the 🙋 template, exact commands from its needs-you lines, label needs-you.`,
 ]
