@@ -11,6 +11,7 @@ from careconnect.fakes import (
     FakeGrounding,
     FakeGuardrail,
     FakeKnowledgeBase,
+    FakeRelevance,
 )
 from careconnect.gateway import FakeGateway
 from careconnect.supervisor import supervisor_flow
@@ -290,7 +291,7 @@ class GoldenScenarioTest(unittest.TestCase):
                 with self.assertLogs("careconnect.supervisor", level="INFO") as logs:
                     out = supervisor_flow(
                         scenario["request"], kb, tickets, FakeGrounding(), FakeGuardrail(),
-                        workflow=workflow, approved=set(documents),
+                        relevance=FakeRelevance(), workflow=workflow, approved=set(documents),
                         cost_meter=FakeCostMeter(scenario.get("cost_per_step", 0.0)),
                         gateway=FakeGateway() if scenario.get("gateway") else None,
                         idempotency_key=scenario.get("idempotency_key"),
@@ -321,6 +322,25 @@ class GoldenScenarioTest(unittest.TestCase):
                     self.assertEqual(tickets.tickets[0]["text"], scenario["ticket_text"])
                 if "reason" in scenario:
                     self.assertEqual(tickets.tickets[0]["reason"], scenario["reason"])
+
+
+class UnrelatedAnswerGoldenTest(unittest.TestCase):
+    def test_cited_answer_that_does_not_address_the_request_escalates(self):
+        class AnyHitKnowledgeBase(FakeKnowledgeBase):
+            def retrieve(self, query):
+                return list(self.documents.items())
+
+        documents = {"visiting-hours-and-policy.md": (APPROVED / "visiting-hours-and-policy.md").read_text()}
+        tickets = FakeEscalationTicketStore()
+        out = supervisor_flow(
+            "parking", AnyHitKnowledgeBase(documents), tickets, FakeGrounding(), FakeGuardrail(),
+            relevance=FakeRelevance(), workflow=FakeApprovalWorkflow(), approved=set(documents),
+            cost_meter=FakeCostMeter(),
+        )
+        self.assertEqual(out["decision"], "escalate")
+        self.assertEqual(out["citations"], [])
+        self.assertNotIn("11:00", out["reply"])
+        self.assertEqual(len(tickets.tickets), 1)
 
 
 class UncitedAnswerGoldenTest(unittest.TestCase):

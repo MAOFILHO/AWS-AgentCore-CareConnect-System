@@ -60,6 +60,18 @@ class FakeGrounding:
         )
 
 
+class FakeRelevance:
+    """Relevance check: the draft must share a word with the request."""
+
+    def __init__(self, error=False):
+        self.error = error
+
+    def check(self, request, draft):
+        if self.error:
+            raise RuntimeError("relevance unavailable")
+        return bool(set(re.findall(r"[a-z0-9]+", request.lower())) & set(re.findall(r"[a-z0-9]+", draft.lower())))
+
+
 class FakeGuardrail:
     def __init__(self, allow=True, error=False):
         self.allow = allow

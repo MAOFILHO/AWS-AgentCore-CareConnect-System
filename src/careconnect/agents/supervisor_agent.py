@@ -8,7 +8,7 @@ WHAT THIS AGENT DOES
     retrieval_agent.py     -> approved Knowledge Base lookups
     task_tool_agent.py     -> operational actions via AgentCore Gateway (MCP)
     escalation_agent.py    -> human-review tickets + Step Functions
-    verification_agent.py  -> grounding + deterministic safety + guardrail
+    verification_agent.py  -> grounding + relevance + deterministic safety + guardrail
   For each patient request it: runs a safety check, plans which agents are
   needed, runs them, combines only the SAFE outputs into a draft, and verifies
   that draft before returning it. Clinical questions are escalated, never answered.
@@ -230,12 +230,12 @@ def combine_safe_results(results, safety, state):
 # ---------------------------------------------------------------------------
 # 5. Verify the draft against the SAME passages retrieval returned.
 # ---------------------------------------------------------------------------
-def verify_response(draft, evidence, state):
+def verify_response(request, draft, evidence, state):
     state.step("Verification Agent")
     if not evidence.strip():
         return {"verification_status": "SKIPPED", "reason": "no evidence available"}
     try:
-        return verify(draft, evidence)
+        return verify(request, draft, evidence)
     except Exception as exc:
         return {"verification_status": "ERROR", "reason": str(exc)}
 
@@ -279,7 +279,7 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
             return {**outcome, "decision": "escalate", "draft_response": draft}
         if results.get("task", {}).get("staged"):  # fixed notice: never the model's free text
             return {**outcome, **staged_reply(request, results, evidence, state)}
-        verification = verify_response(draft, evidence, state)
+        verification = verify_response(request, draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
     except Exception as exc:  # fail closed: never show the draft; log the class name only, never message or error text
@@ -306,7 +306,7 @@ def staged_reply(request, results, evidence, state):
         info = "Approved Riverside Health information:\n" + evidence
         sources = approved_sources(evidence)
         try:  # the refill is already staged: no failure here may hide that
-            passed = bool(sources) and verify_response(info, evidence, state).get("verification_status") == "PASS"
+            passed = bool(sources) and verify_response(request, info, evidence, state).get("verification_status") == "PASS"
             if passed:
                 reply, citations = info + "\n\n" + STAGED_NOTICE, sources
             else:

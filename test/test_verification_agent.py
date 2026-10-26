@@ -49,5 +49,32 @@ class VerificationInterfaceTest(unittest.TestCase):
         )
 
 
+class RelevanceCheckTest(unittest.TestCase):
+    def check(self, reply):
+        with mock.patch.object(agent, "get_verification_agent", return_value=mock.Mock(return_value=reply)):
+            return agent.run_relevance_check("parking", "Visiting is 11:00-20:00.")
+
+    def test_a_parsed_reply_is_the_result(self):
+        self.assertTrue(self.check('{"relevant": true, "reason": "on topic"}').relevant)
+        self.assertFalse(self.check('{"relevant": false, "reason": "other topic"}').relevant)
+
+    def test_a_reply_that_does_not_parse_is_not_relevant(self):
+        for reply in ("yes", "", '{"relevant": "maybe", "reason": "x"}', '{"reason": "x"}', '```json\n{}\n```'):
+            with self.subTest(reply):
+                self.assertFalse(self.check(reply).relevant)
+
+    def test_verify_fails_when_the_draft_is_not_relevant(self):
+        draft = "Visiting is 11:00-20:00.\nSource:\ns3://docs/approved/v.md"
+        grounded = mock.Mock(structured_output=mock.Mock(grounded=True, unsupported_claims=[], reason="ok"))
+        verdicts = {}
+        for relevant in (True, False):
+            model = mock.Mock(side_effect=[grounded, '{"relevant": %s, "reason": "r"}' % str(relevant).lower()])
+            with mock.patch.object(agent, "get_verification_agent", return_value=model):
+                verdicts[relevant] = agent.verify(
+                    "visiting hours", draft, draft, FakeSafetyLambda(), FakeGuardrail()
+                )["verification_status"]
+        self.assertEqual(verdicts, {True: "PASS", False: "FAIL"})
+
+
 if __name__ == "__main__":
     unittest.main()

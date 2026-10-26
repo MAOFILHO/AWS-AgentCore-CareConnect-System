@@ -7,6 +7,7 @@ from careconnect.fakes import (
     FakeGrounding,
     FakeGuardrail,
     FakeKnowledgeBase,
+    FakeRelevance,
 )
 from careconnect.supervisor import ESCALATION_NOTICE, UNVERIFIED_REASON, supervisor_flow
 from careconnect.verification import verify
@@ -14,15 +15,23 @@ from careconnect.verification import verify
 DOCS = {"visiting-hours-and-policy.md": "General ward visiting hours are 11:00-20:00."}
 
 
+class AnyHitKnowledgeBase(FakeKnowledgeBase):
+    """Retrieval returns its best match even when nothing relevant exists."""
+
+    def retrieve(self, query):
+        return list(self.documents.items())
+
+
 class VerificationGateTest(unittest.TestCase):
-    def flow(self, documents=DOCS, grounding=None, guardrail=None):
+    def flow(self, documents=DOCS, grounding=None, guardrail=None, relevance=None, request="visiting hours",
+             knowledge_base=FakeKnowledgeBase):
         return supervisor_flow(
-            "visiting hours",
-            FakeKnowledgeBase(documents),
+            request,
+            knowledge_base(documents),
             FakeEscalationTicketStore(),
             grounding=grounding or FakeGrounding(),
             guardrail=guardrail or FakeGuardrail(),
-            workflow=FakeApprovalWorkflow(), approved=set(documents),
+            relevance=relevance or FakeRelevance(), workflow=FakeApprovalWorkflow(), approved=set(documents),
             cost_meter=FakeCostMeter(),
         )
 
@@ -34,11 +43,11 @@ class VerificationGateTest(unittest.TestCase):
         self.assertEqual(out["escalation"]["reason"], UNVERIFIED_REASON)
 
     def test_draft_without_citation_shows_notice_only(self):
-        result = verify("Visiting is 11:00-20:00.", [], {}, FakeGrounding(), FakeGuardrail())
+        result = verify("visiting", "Visiting is 11:00-20:00.", [], {}, FakeGrounding(), FakeGuardrail(), FakeRelevance())
         self.assertEqual(result.status, "FAIL")
 
     def test_citation_not_in_evidence_fails(self):
-        result = verify("x", ["other.md"], {"a.md": "x"}, FakeGrounding(), FakeGuardrail())
+        result = verify("x", "x", ["other.md"], {"a.md": "x"}, FakeGrounding(), FakeGuardrail(), FakeRelevance())
         self.assertEqual(result.status, "FAIL")
 
     def test_ungrounded_claim_shows_notice_only(self):
@@ -58,6 +67,19 @@ class VerificationGateTest(unittest.TestCase):
 
     def test_guardrail_error_shows_notice_only(self):
         self.assert_notice_only(self.flow(guardrail=FakeGuardrail(error=True)))
+
+    def test_unrelated_evidence_shows_notice_only(self):
+        self.assert_notice_only(self.flow(request="parking", knowledge_base=AnyHitKnowledgeBase))
+
+    def test_relevance_error_shows_notice_only(self):
+        self.assert_notice_only(self.flow(relevance=FakeRelevance(error=True)))
+
+    def test_verify_fails_on_an_unrelated_draft(self):
+        result = verify(
+            "parking", "Visiting is 11:00-20:00.", ["a.md"], {"a.md": "Visiting is 11:00-20:00."},
+            FakeGrounding(), FakeGuardrail(), FakeRelevance(),
+        )
+        self.assertEqual((result.status, result.reason), ("FAIL", "relevance"))
 
     def test_cited_grounded_draft_ships(self):
         out = self.flow()

@@ -9,6 +9,7 @@ from careconnect.fakes import (
     FakeGrounding,
     FakeGuardrail,
     FakeKnowledgeBase,
+    FakeRelevance,
 )
 from careconnect.supervisor import supervisor_flow
 
@@ -28,7 +29,7 @@ class OutcomeLogTest(unittest.TestCase):
             try:
                 out = supervisor_flow(
                     text, kb, FakeEscalationTicketStore(), FakeGrounding(), FakeGuardrail(),
-                    workflow=FakeApprovalWorkflow(), approved={DOC},
+                    relevance=FakeRelevance(), workflow=FakeApprovalWorkflow(), approved={DOC},
                     cost_meter=kwargs.pop("cost_meter", FakeCostMeter()), **kwargs,
                 )
             except RuntimeError:

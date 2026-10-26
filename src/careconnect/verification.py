@@ -1,4 +1,4 @@
-"""Verification: citation, grounding, PII and Guardrail checks on a draft reply."""
+"""Verification: citation, grounding, relevance, PII and Guardrail checks on a draft reply."""
 
 from typing import Literal
 
@@ -12,7 +12,7 @@ class VerificationResult(BaseModel):
     reason: str = ""
 
 
-def verify(draft, citations, passages, grounding, guardrail):
+def verify(request, draft, citations, passages, grounding, guardrail, relevance):
     """PASS only if every check passes. Any other outcome, including an error, is not PASS."""
     if not citations or any(name not in passages for name in citations):
         return VerificationResult(status="FAIL", reason="citation")
@@ -23,6 +23,8 @@ def verify(draft, citations, passages, grounding, guardrail):
             return VerificationResult(status="FAIL", reason="grounding")
         if not guardrail.check(draft):
             return VerificationResult(status="FAIL", reason="guardrail")
+        if not relevance.check(request, draft):
+            return VerificationResult(status="FAIL", reason="relevance")
     except Exception:
         return VerificationResult(status="ERROR", reason="check unavailable")
     return VerificationResult(status="PASS")
