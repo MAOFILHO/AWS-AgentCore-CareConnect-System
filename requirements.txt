@@ -1,3 +1,4 @@
 pydantic==2.14.1
 pyyaml==6.0.2
-boto3==1.40.0
+boto3==1.43.118
+bedrock-agentcore==1.25.0

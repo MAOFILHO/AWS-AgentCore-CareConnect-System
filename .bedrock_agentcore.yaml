@@ -1,0 +1,24 @@
+# AgentCore starter toolkit config for the Supervisor runtime; scripts/deploy-runtime.sh reads it.
+# direct_code_deploy zips src/ with src/requirements.txt: no Docker, no ECR, no CodeBuild.
+default_agent: careconnectsupervisor
+agents:
+  careconnectsupervisor:
+    name: careconnectsupervisor
+    language: python
+    entrypoint: src/careconnect/runtime_entrypoint.py
+    source_path: src
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_12
+    aws:
+      account: '759316130780'
+      region: us-east-1
+      execution_role_auto_create: true
+      s3_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: false
+    memory:
+      mode: NO_MEMORY
