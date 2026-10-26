@@ -167,9 +167,11 @@ test("a reply in time is unchanged and clears the timer", async () => {
   mock.timers.enable({ apis: ["setTimeout"] });
   try {
     const fetch = fakeApi(200, { decision: "allow", reply: "Park in lot B.", citations: ["parking.md"] });
-    const result = await ask("q", { apiUrl, fetch });
+    let signal;
+    const result = await ask("q", { apiUrl, fetch: (u, init) => { signal = init.signal; return fetch(u, init); } });
     assert.deepEqual(result, { text: "Park in lot B.", citations: ["parking.md"] });
     mock.timers.tick(REQUEST_TIMEOUT_MS);
+    assert.equal(signal.aborted, false);
   } finally {
     mock.timers.reset();
   }
