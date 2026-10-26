@@ -62,6 +62,17 @@ class DataStackTemplateTest(unittest.TestCase):
             {"ApprovedDocsBucketName", "EscalationsTableName", "ApprovalWorkflowArn"},
         )
 
+    def test_outputs_reference_their_resources(self):
+        outputs = self.template["Outputs"]
+        expected = {
+            "ApprovedDocsBucketName": "AWS::S3::Bucket",
+            "EscalationsTableName": "AWS::DynamoDB::Table",
+            "ApprovalWorkflowArn": "AWS::StepFunctions::StateMachine",
+        }
+        for key, type_ in expected.items():
+            ref = outputs[key]["Value"]["Ref"]
+            self.assertEqual(self.resources[ref]["Type"], type_, key)
+
     def test_no_forbidden_resource_types(self):
         types = {r["Type"] for r in self.resources.values()}
         self.assertFalse(types & FORBIDDEN, types & FORBIDDEN)
@@ -83,14 +94,24 @@ class SyncApprovedDocsTest(unittest.TestCase):
             fake = Path(tmp) / "aws"
             fake.write_text(
                 "#!/usr/bin/env bash\n"
+                f'echo "$@" >> "{tmp}/calls"\n'
                 f'if [ "$2" = "ls" ]; then for i in $(seq 1 {remote_count}); do echo obj$i; done; fi\n'
             )
             fake.chmod(0o755)
             env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}"}
-            return subprocess.run(
+            result = subprocess.run(
                 ["bash", str(ROOT / "scripts/sync-approved-docs.sh"), "test-bucket"],
                 env=env, capture_output=True, text=True,
             )
+            result.calls = (Path(tmp) / "calls").read_text().splitlines()
+            return result
+
+    def test_uploads_approved_folder_to_the_bucket(self):
+        result = self.run_sync(self.local_count())
+        src = ROOT / "Docs/Repo/careconnect-approved-docs/approved"
+        syncs = [c.split() for c in result.calls if c.startswith("s3 sync ")]
+        self.assertEqual(len(syncs), 1, result.calls)
+        self.assertEqual(syncs[0][2:4], [str(src), "s3://test-bucket/approved/"])
 
     def local_count(self):
         src = ROOT / "Docs/Repo/careconnect-approved-docs/approved"
