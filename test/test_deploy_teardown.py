@@ -127,6 +127,15 @@ class DeployTeardownTest(unittest.TestCase):
             self.assertIn(f"{param}={key}", log)
             self.assertIn(f"s3://docs-bucket/{key}", log)
 
+    def test_bedrock_deploy_passes_the_guardrail_hash(self):
+        proc, log, _ = self.run_script(DEPLOY)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        expected = subprocess.run(["python3", str(ROOT / "scripts/guardrail_hash.py"),
+                                   str(ROOT / "infra/careconnect-bedrock.yaml")],
+                                  capture_output=True, text=True, check=True).stdout.strip()
+        bedrock = next(l for l in log.splitlines() if "deploy --stack-name careconnect-bedrock" in l)
+        self.assertIn(f"GuardrailHash={expected}", bedrock)
+
     def test_deploy_runs_agentcore_from_the_repo_root(self):
         proc, log, _ = self.run_script(DEPLOY)
         self.assertEqual(proc.returncode, 0, proc.stderr)

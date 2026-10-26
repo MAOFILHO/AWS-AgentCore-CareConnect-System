@@ -5,6 +5,11 @@
     "ApprovedDocsBucketName": {
       "Type": "String",
       "Description": "Approved-docs bucket from the data stack output ApprovedDocsBucketName."
+    },
+    "GuardrailHash": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9a-f]{12}$",
+      "Description": "Hash of the Guardrail properties from scripts/guardrail_hash.py. A new value cuts a new GuardrailVersion."
     }
   },
   "Resources": {
@@ -45,7 +50,7 @@
       "Type": "AWS::Bedrock::GuardrailVersion",
       "Properties": {
         "GuardrailIdentifier": {"Fn::GetAtt": ["Guardrail", "GuardrailId"]},
-        "Description": "Published by the Bedrock stack"
+        "Description": {"Fn::Sub": "Guardrail ${GuardrailHash}"}
       }
     },
     "VectorBucket": {

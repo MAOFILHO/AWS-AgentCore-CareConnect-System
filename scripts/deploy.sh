@@ -40,7 +40,9 @@ deploy careconnect-data careconnect-data.yaml
 BUCKET=$(output careconnect-data ApprovedDocsBucketName)
 bash "$ROOT/scripts/sync-approved-docs.sh" "$BUCKET" "$REGION"
 
-deploy careconnect-bedrock careconnect-bedrock.yaml "ApprovedDocsBucketName=$BUCKET"
+GUARDRAIL_HASH=$(python3 "$ROOT/scripts/guardrail_hash.py" "$ROOT/infra/careconnect-bedrock.yaml")
+deploy careconnect-bedrock careconnect-bedrock.yaml "ApprovedDocsBucketName=$BUCKET" \
+  "GuardrailHash=$GUARDRAIL_HASH"
 # Assign each output or code key on its own line: an exit inside $(...) in an argument is ignored.
 KB_ID=$(output careconnect-bedrock KnowledgeBaseId)
 DS_ID=$(output careconnect-bedrock DataSourceId)
