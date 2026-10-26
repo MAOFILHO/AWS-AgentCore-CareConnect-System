@@ -2,7 +2,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  ask, show, init, ERROR_NOTICE, REQUEST_TIMEOUT_MS, WAITING_NOTICE,
+  ask, show, init, ERROR_NOTICE, REQUEST_TIMEOUT_MS, WAITING_NOTICE, NOT_CONNECTED_NOTICE,
 } from "../src/frontend/chat.js";
 
 const ESCALATION_NOTICE = "A licensed clinician will follow up with you.";
@@ -233,4 +233,23 @@ test("an empty question shows no waiting text", async () => {
   const { box, submit } = chatPage(fakeApi(200, {}));
   await submit("   ");
   assert.equal(box.children.length, 0);
+});
+
+test("the placeholder API URL shows the not-connected text and never calls fetch", async () => {
+  let calls = 0;
+  const form = el(), input = el(), box = el();
+  const doc = { createElement: el, getElementById: (id) => ({ "chat-form": form, question: input, reply: box })[id] };
+  init(doc, { apiUrl: "https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/prod/careconnect", fetch: () => { calls += 1; } });
+  input.value = "when is the clinic open";
+  await form.listeners.submit({ preventDefault() {} });
+  assert.equal(calls, 0);
+  assert.equal(NOT_CONNECTED_NOTICE, "This site is not connected yet. Please contact the hospital.");
+  assert.deepEqual(box.children.map((c) => c.textContent), [NOT_CONNECTED_NOTICE]);
+});
+
+test("a real API URL still calls fetch", async () => {
+  let calls = 0;
+  const { submit } = chatPage(() => { calls += 1; return fakeApi(500, {})(); });
+  await submit("one");
+  assert.equal(calls, 1);
 });

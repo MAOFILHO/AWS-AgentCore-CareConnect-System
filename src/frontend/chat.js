@@ -1,4 +1,5 @@
 export const WAITING_NOTICE = "Looking this up\u2026";
+export const NOT_CONNECTED_NOTICE = "This site is not connected yet. Please contact the hospital.";
 export const ERROR_NOTICE = "Something went wrong. Please try again.";
 const ESCALATE_STATUS = "Sent to a clinician for review.";
 const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
@@ -68,6 +69,10 @@ export function init(doc, { apiUrl, fetch }) {
     event.preventDefault();
     const question = input.value.trim();
     if (!question || pending) return;
+    if (apiUrl.includes("YOUR-API-ID")) {
+      show(doc, container, { text: NOT_CONNECTED_NOTICE, citations: [] });
+      return;
+    }
     pending = true;
     try {
       show(doc, container, { text: WAITING_NOTICE, citations: [] });
