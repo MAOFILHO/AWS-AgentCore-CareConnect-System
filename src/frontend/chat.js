@@ -2,15 +2,20 @@ export const ERROR_NOTICE = "Something went wrong. Please try again.";
 const ESCALATE_STATUS = "Sent to a clinician for review.";
 const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
 const AWAITING_STATUS = "Awaiting clinician approval.";
+// Supervisor limit (30 s) plus 5 s margin.
+export const REQUEST_TIMEOUT_MS = 35_000;
 const STATUS = { escalate: ESCALATE_STATUS, block: STOPPED_STATUS, stop: STOPPED_STATUS };
 
 // Turn the API reply into what the page shows. Anything unexpected is the fixed error.
 export async function ask(question, { apiUrl, fetch }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: question }),
+      signal: controller.signal,
     });
     if (!res.ok) return { text: ERROR_NOTICE, citations: [] };
     const body = await res.json();
@@ -25,6 +30,8 @@ export async function ask(question, { apiUrl, fetch }) {
     }
   } catch {
     // fall through to the fixed error
+  } finally {
+    clearTimeout(timer);
   }
   return { text: ERROR_NOTICE, citations: [] };
 }
