@@ -1,0 +1,16 @@
+test_deploys_with_the_five_values_and_prints_the_runtime_arn (test_gateway_stack.DeployRuntimeTest.test_deploys_with_the_five_values_and_prints_the_runtime_arn) ... ok
+test_fails_before_deploy_when_a_value_is_empty (test_gateway_stack.DeployRuntimeTest.test_fails_before_deploy_when_a_value_is_empty) ... ok
+test_fails_when_agentcore_deploy_fails (test_gateway_stack.DeployRuntimeTest.test_fails_when_agentcore_deploy_fails) ... ok
+test_fails_when_deploy_prints_no_runtime_arn (test_gateway_stack.DeployRuntimeTest.test_fails_when_deploy_prints_no_runtime_arn) ... ok
+test_treats_none_as_empty (test_gateway_stack.DeployRuntimeTest.test_treats_none_as_empty) ... ok
+test_every_taggable_resource_is_tagged (test_gateway_stack.GatewayTemplateTest.test_every_taggable_resource_is_tagged) ... ok
+test_gateway_role_may_only_invoke_the_tools_lambda (test_gateway_stack.GatewayTemplateTest.test_gateway_role_may_only_invoke_the_tools_lambda) ... ok
+test_gateway_uses_iam_auth_over_mcp (test_gateway_stack.GatewayTemplateTest.test_gateway_uses_iam_auth_over_mcp) ... ok
+test_no_account_ids_or_literal_arns (test_gateway_stack.GatewayTemplateTest.test_no_account_ids_or_literal_arns) ... ok
+test_outputs_the_gateway_url (test_gateway_stack.GatewayTemplateTest.test_outputs_the_gateway_url) ... ok
+test_target_is_the_tools_lambda_with_its_three_tools (test_gateway_stack.GatewayTemplateTest.test_target_is_the_tools_lambda_with_its_three_tools) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 3.398s
+
+OK

@@ -99,7 +99,7 @@ RUNTIME_ARN = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/careconn
 class DeployRuntimeTest(unittest.TestCase):
     """Runs scripts/deploy-runtime.sh with a fake `aws` and a fake `agentcore` on PATH."""
 
-    def run_deploy(self, outputs):
+    def run_deploy(self, outputs, agentcore_body=f'echo "Agent ARN: {RUNTIME_ARN}"\n'):
         with tempfile.TemporaryDirectory() as tmp:
             # The fake aws answers describe-stacks with FAKE_<stack>_<key>.
             aws = Path(tmp) / "aws"
@@ -116,7 +116,7 @@ class DeployRuntimeTest(unittest.TestCase):
             agentcore.write_text(
                 "#!/usr/bin/env bash\n"
                 f'echo "agentcore $*" >> "{tmp}/calls"\n'
-                f'echo "Agent ARN: {RUNTIME_ARN}"\n'
+                + agentcore_body
             )
             aws.chmod(0o755)
             agentcore.chmod(0o755)
@@ -167,6 +167,16 @@ class DeployRuntimeTest(unittest.TestCase):
         result = self.run_deploy(outputs)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("CARECONNECT_KB_ID is empty", result.stderr)
+
+    def test_fails_when_agentcore_deploy_fails(self):
+        result = self.run_deploy(OUTPUTS, 'echo "deploy error" >&2\nexit 3\n')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("Runtime ARN", result.stdout)
+
+    def test_fails_when_deploy_prints_no_runtime_arn(self):
+        result = self.run_deploy(OUTPUTS, 'echo "deployed"\n')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no runtime ARN", result.stderr)
 
 
 if __name__ == "__main__":
