@@ -14,6 +14,10 @@ ARN = "arn:aws:bedrock-agentcore:us-east-1:000000000000:runtime/careconnect_supe
 # Fake aws: answers describe-stacks by stack name and output key; "empty" simulates a missing output.
 FAKE_AWS = r"""#!/usr/bin/env bash
 echo "aws $*" >> "$FAKE_LOG"
+if [ "$1" = bedrock-agentcore-control ] && [ "$2" = list-agent-runtimes ]; then
+  case "$*" in *"=='careconnectsupervisor'"*) echo "$FAKE_ARN" ;; *) echo "None" ;; esac
+  exit 0
+fi
 stack=""; query=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -39,7 +43,9 @@ if ! grep -q "careconnectsupervisor:" .bedrock_agentcore.yaml 2>/dev/null; then
   echo "Configuration not found: .bedrock_agentcore.yaml"; exit 1
 fi
 echo "agentcore $*" >> "$FAKE_LOG"
-echo "Deployed: $FAKE_ARN"
+# The real console box wraps a long ARN over two lines.
+echo "| Runtime ARN: ${FAKE_ARN:0:60} |"
+echo "| ${FAKE_ARN:60} |"
 """
 
 
@@ -101,9 +107,11 @@ class DeployRuntimeTest(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("CARECONNECT_GATEWAY_URL", proc.stderr)
 
-    def test_no_arn_in_deploy_output_fails(self):
-        proc, _ = self.run_script(arn="no arn here")
+    def test_no_listed_runtime_fails_and_names_the_agent(self):
+        proc, log = self.run_script(arn="None")
         self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("careconnectsupervisor", proc.stderr)
+        self.assertNotIn("tag-resource", log)
 
 
 class AgentCoreConfigTest(unittest.TestCase):
