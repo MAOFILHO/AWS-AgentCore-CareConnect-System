@@ -2,7 +2,7 @@ import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  ask, show, init, ERROR_NOTICE, REQUEST_TIMEOUT_MS,
+  ask, show, init, ERROR_NOTICE, REQUEST_TIMEOUT_MS, WAITING_NOTICE,
 } from "../src/frontend/chat.js";
 
 const ESCALATION_NOTICE = "A licensed clinician will follow up with you.";
@@ -12,7 +12,9 @@ const apiUrl = "https://api.test/careconnect";
 const fakeApi = (status, body) => async () => ({ ok: status < 400, status, json: async () => body });
 
 function el() {
-  const e = { children: [], textContent: "", listeners: {} };
+  let text = "";
+  const e = { children: [], listeners: {} };
+  Object.defineProperty(e, "textContent", { get: () => text, set: (v) => { text = v; if (v === "") e.children = []; } });
   e.appendChild = (c) => { e.children.push(c); };
   e.addEventListener = (n, f) => { e.listeners[n] = f; };
   return e;
@@ -207,4 +209,28 @@ test("after a reply or an error the next submit works", async () => {
   await submit("two");
   assert.equal(calls, 2);
   assert.equal(box.children.at(-1).textContent, "ok");
+});
+
+test("the waiting text shows after submit and the reply replaces it", async () => {
+  let release;
+  const { box, submit } = chatPage(() => new Promise((r) => { release = r; }));
+  const first = submit("one");
+  assert.equal(box.textContent, "");
+  assert.equal(box.children.at(-1).textContent, WAITING_NOTICE);
+  assert.equal(WAITING_NOTICE, "Looking this up\u2026");
+  release({ ok: true, json: async () => ({ decision: "allow", reply: "the answer", citations: [] }) });
+  await first;
+  assert.deepEqual(box.children.map((c) => c.textContent), ["the answer"]);
+});
+
+test("the fixed error replaces the waiting text", async () => {
+  const { box, submit } = chatPage(fakeApi(500, {}));
+  await submit("one");
+  assert.deepEqual(box.children.map((c) => c.textContent), [ERROR_NOTICE]);
+});
+
+test("an empty question shows no waiting text", async () => {
+  const { box, submit } = chatPage(fakeApi(200, {}));
+  await submit("   ");
+  assert.equal(box.children.length, 0);
 });

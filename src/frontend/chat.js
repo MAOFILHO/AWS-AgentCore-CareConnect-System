@@ -1,3 +1,4 @@
+export const WAITING_NOTICE = "Looking this up\u2026";
 export const ERROR_NOTICE = "Something went wrong. Please try again.";
 const ESCALATE_STATUS = "Sent to a clinician for review.";
 const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
@@ -69,6 +70,7 @@ export function init(doc, { apiUrl, fetch }) {
     if (!question || pending) return;
     pending = true;
     try {
+      show(doc, container, { text: WAITING_NOTICE, citations: [] });
       show(doc, container, await ask(question, { apiUrl, fetch }));
     } finally {
       pending = false;
