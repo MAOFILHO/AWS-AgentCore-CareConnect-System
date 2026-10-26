@@ -8,6 +8,10 @@ FACILITIES = (APPROVED / "facilities-parking-wayfinding.md").read_text()
 VISITING = (APPROVED / "visiting-hours-and-policy.md").read_text()
 
 
+def flatten(text):
+    return " ".join(text.split())
+
+
 class AnswerSentencesTest(unittest.TestCase):
     def test_parking_question_keeps_the_parking_sentences_only(self):
         out = "\n".join(answer_sentences("Where can I park", FACILITIES))
@@ -36,3 +40,49 @@ class AnswerSentencesTest(unittest.TestCase):
     def test_care_does_not_match_car(self):
         text = "Park in the car park. Child care is on level 2."
         self.assertEqual(answer_sentences("Where is child care", text), ["Child care is on level 2."])
+
+    def test_flattened_parking_passage_keeps_the_parking_sentences_only(self):
+        out = "\n".join(answer_sentences("Where can I park?", flatten(FACILITIES)))
+        self.assertIn("multi-storey car park", out)
+        self.assertNotIn("prayer", out)
+
+    def test_flattened_visiting_passage_keeps_the_birth_partner_sentence(self):
+        out = "\n".join(answer_sentences("What time can my husband visit me in maternity?", flatten(VISITING)))
+        self.assertIn("birth partner", out)
+        self.assertNotIn("ICU", out)
+
+    def test_flattened_contact_directory_still_quotes_the_pharmacy_phone_number(self):
+        directory = flatten((APPROVED / "contact-directory.md").read_text())
+        out = "\n".join(answer_sentences("What is the pharmacy phone number?", directory))
+        self.assertRegex(out, r"\(555\) 010-\d{4}")
+
+    def test_flattened_billing_question_quotes_the_billing_timing_sentence(self):
+        billing = (APPROVED / "billing-faq.md").read_text()
+        out = "\n".join(answer_sentences("When will I get my bill?", flatten(billing)))
+        self.assertIn("within 14 days", out)
+
+    def test_flattened_heading_question_quotes_a_sentence_of_the_line_break_reply(self):
+        for path in sorted(APPROVED.glob("*.md")):
+            text = path.read_text()
+            heading = next(line for line in text.splitlines() if line.startswith("## "))
+            request = heading.lstrip("# ")
+            flat = answer_sentences(request, flatten(text))
+            lines = answer_sentences(request, text)
+            for sentence in flat:
+                self.assertIn(sentence, flatten(text), path.name)
+            self.assertTrue(any(line in quoted for line in lines for quoted in flat), path.name)
+
+    def test_records_request_duration_does_not_quote_the_fees_section(self):
+        records = (APPROVED / "medical-records-request.md").read_text()
+        for text in (records, flatten(records)):
+            out = "\n".join(answer_sentences("How long does a records request take?", text))
+            self.assertNotIn("fee", out.lower())
+
+    def test_flattened_reply_holds_no_markdown_marker_and_no_document_title(self):
+        for path in sorted(APPROVED.glob("*.md")):
+            text = path.read_text()
+            title = text.splitlines()[0].lstrip("# ")
+            for heading in (line for line in text.splitlines() if line.startswith("## ")):
+                for sentence in answer_sentences(heading.lstrip("# "), flatten(text)):
+                    self.assertNotIn("#", sentence, path.name)
+                    self.assertNotIn(title, sentence, path.name)
