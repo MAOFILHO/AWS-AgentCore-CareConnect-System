@@ -41,12 +41,15 @@ def _flat_sentences(text):
     """(section, sentence) pairs of a passage with no line breaks, split only on its "#" markers.
 
     No heading is guessed: a heading runs into its first sentence, so the whole section is the
-    context. A sentence that is only a heading question is left out.
+    context. The title section (from "# " to the first "## ") and a sentence that is only a heading
+    question are left out, and the leading "#" run of a quoted sentence is stripped.
     """
     for section in re.split(r"(?<!\S)(?=#{1,6} )", text):
+        if re.match(r"# ", section):
+            continue
         for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", section.strip()):
             if sentence and not (sentence.startswith("#") and sentence.endswith("?")):
-                yield section, sentence
+                yield section, re.sub(r"^#{1,6} ", "", sentence)
 
 
 def answer_sentences(request, text):
@@ -55,7 +58,7 @@ def answer_sentences(request, text):
     A request word may match the sentence or its section heading, so "maternity" finds the
     sentences under "Maternity and birthing". Ties go to the heading match, then to the
     earlier sentence. A passage with no line breaks has no heading line, so a word of the
-    sentence counts double and a word of the rest of its section counts once. An empty list
+    sentence counts three times and a word of the rest of its section counts once. An empty list
     means nothing answers the request.
     """
     wanted = _stems(request)

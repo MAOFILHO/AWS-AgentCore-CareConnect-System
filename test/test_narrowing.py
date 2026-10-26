@@ -77,3 +77,12 @@ class AnswerSentencesTest(unittest.TestCase):
         for text in (records, flatten(records)):
             out = "\n".join(answer_sentences("How long does a records request take?", text))
             self.assertNotIn("fee", out.lower())
+
+    def test_flattened_reply_holds_no_markdown_marker_and_no_document_title(self):
+        for path in sorted(APPROVED.glob("*.md")):
+            text = path.read_text()
+            title = text.splitlines()[0].lstrip("# ")
+            for heading in (line for line in text.splitlines() if line.startswith("## ")):
+                for sentence in answer_sentences(heading.lstrip("# "), flatten(text)):
+                    self.assertNotIn("#", sentence, path.name)
+                    self.assertNotIn(title, sentence, path.name)
