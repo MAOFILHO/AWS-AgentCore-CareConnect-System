@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import subprocess
@@ -33,6 +34,7 @@ while [ $# -gt 0 ]; do
 done
 [ -z "$query" ] && exit 0
 key=$(echo "$query" | sed -E "s/.*OutputKey=='([A-Za-z]+)'.*/\1/")
+[ "$stack/$key" = "${FAKE_MISSING:-}" ] && { echo "None"; exit 0; }
 case "$stack/$key" in
   careconnect-data/ApprovedDocsBucketName) echo "docs-bucket" ;;
   careconnect-data/ApprovalWorkflowArn) echo "arn:aws:states:us-east-1:000000000000:stateMachine:wf" ;;
@@ -45,18 +47,19 @@ case "$stack/$key" in
   careconnect-api/ApiUrl) echo "$FAKE_API_URL" ;;
   careconnect-api/FrontendBucketName) echo "web-bucket" ;;
   careconnect-api/DistributionId) echo "DIST123" ;;
+  careconnect-api/CloudFrontDomain) echo "d123.cloudfront.net" ;;
   *) echo "None" ;;
 esac
 """
 
 FAKE_AGENTCORE = r"""#!/usr/bin/env bash
-echo "agentcore $*" >> "$FAKE_LOG"
+echo "agentcore $* cwd=$PWD" >> "$FAKE_LOG"
 echo "Deployed: $FAKE_ARN"
 """
 
 
 class DeployTeardownTest(unittest.TestCase):
-    def run_script(self, script):
+    def run_script(self, script, **extra_env):
         with tempfile.TemporaryDirectory() as tmp:
             bindir = Path(tmp) / "bin"
             bindir.mkdir()
@@ -67,7 +70,7 @@ class DeployTeardownTest(unittest.TestCase):
             docs = len([p for p in APPROVED.rglob("*") if p.is_file() and not p.name.startswith(".")])
             env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "FAKE_LOG": str(log),
                    "FAKE_SYNCED": str(synced), "FAKE_DOC_COUNT": str(docs), "FAKE_ARN": ARN,
-                   "FAKE_API_URL": API_URL}
+                   "FAKE_API_URL": API_URL, **extra_env}
             proc = subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env, cwd=tmp)
             configs = {p.parent.name: p.read_text() for p in synced.rglob("config.js")}
             return proc, (log.read_text() if log.exists() else ""), configs
@@ -100,9 +103,32 @@ class DeployTeardownTest(unittest.TestCase):
         proc, log, _ = self.run_script(DEPLOY)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         # The API stack derives ALLOWED_ORIGIN from its own distribution, so deploy passes no override.
-        self.assertNotIn("ALLOWED_ORIGIN", log)
+        self.assertNotIn("allowed_origin", log.lower())
+        self.assertNotIn("allowedorigin", log.lower())
         template = (ROOT / "infra/careconnect-api.yaml").read_text()
         self.assertIn('ALLOWED_ORIGIN: !Sub "https://${Distribution.DomainName}"', template)
+
+    def test_a_missing_stack_output_stops_the_deploy(self):
+        proc, log, _ = self.run_script(DEPLOY, FAKE_MISSING="careconnect-lambdas/ToolsFunctionArn")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("careconnect-lambdas has no output ToolsFunctionArn", proc.stderr)
+        self.assertNotIn("--stack-name careconnect-gateway", log)
+
+    def test_lambda_code_keys_change_with_the_source(self):
+        proc, log, _ = self.run_script(DEPLOY)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        for name, param in (("careconnect-deterministic-safety", "SafetyCodeKey"),
+                            ("careconnect-mock-hospital-tools", "ToolsCodeKey"),
+                            ("careconnect-agentcore-proxy", "ProxyCodeKey")):
+            src = ROOT / "Docs/Repo/lambda-functions" / name / "lambda_function.py"
+            key = f"code/{name}-{hashlib.sha256(src.read_bytes()).hexdigest()[:12]}.zip"
+            self.assertIn(f"{param}={key}", log)
+            self.assertIn(f"s3://docs-bucket/{key}", log)
+
+    def test_deploy_runs_agentcore_from_the_repo_root(self):
+        proc, log, _ = self.run_script(DEPLOY)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn(f"cwd={ROOT}", next(l for l in log.splitlines() if l.startswith("agentcore deploy")))
 
     def test_teardown_empties_the_buckets_and_deletes_in_reverse_order(self):
         proc, log, _ = self.run_script(TEARDOWN)

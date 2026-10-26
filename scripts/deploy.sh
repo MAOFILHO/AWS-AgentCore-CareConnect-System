@@ -8,6 +8,7 @@ set -euo pipefail
 REGION=us-east-1
 TAGS=(Project=careconnect issue=125)
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" # agentcore reads the project from the cwd
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -27,10 +28,12 @@ output() { # stack key
   echo "$v"
 }
 
-upload_code() { # lambda-dir-name -> s3 key
-  python3 -m zipfile -c "$WORK/$1.zip" "$ROOT/Docs/Repo/lambda-functions/$1/lambda_function.py"
-  aws s3 cp "$WORK/$1.zip" "s3://$BUCKET/code/$1.zip" --region "$REGION" >&2
-  echo "code/$1.zip"
+upload_code() { # lambda-dir-name -> s3 key, named by content hash so a code change changes S3Key
+  local src="$ROOT/Docs/Repo/lambda-functions/$1/lambda_function.py" key
+  key="code/$1-$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest()[:12])' "$src").zip"
+  python3 -m zipfile -c "$WORK/$1.zip" "$src"
+  aws s3 cp "$WORK/$1.zip" "s3://$BUCKET/$key" --region "$REGION" >&2
+  echo "$key"
 }
 
 deploy careconnect-data careconnect-data.yaml
@@ -38,27 +41,35 @@ BUCKET=$(output careconnect-data ApprovedDocsBucketName)
 bash "$ROOT/scripts/sync-approved-docs.sh" "$BUCKET" "$REGION"
 
 deploy careconnect-bedrock careconnect-bedrock.yaml "ApprovedDocsBucketName=$BUCKET"
-aws bedrock-agent start-ingestion-job --knowledge-base-id "$(output careconnect-bedrock KnowledgeBaseId)" \
-  --data-source-id "$(output careconnect-bedrock DataSourceId)" --region "$REGION" >/dev/null
+# Assign each output or code key on its own line: an exit inside $(...) in an argument is ignored.
+KB_ID=$(output careconnect-bedrock KnowledgeBaseId)
+DS_ID=$(output careconnect-bedrock DataSourceId)
+aws bedrock-agent start-ingestion-job --knowledge-base-id "$KB_ID" --data-source-id "$DS_ID" \
+  --region "$REGION" >/dev/null
 
 LAYER="PydanticLayerArn=${PYDANTIC_LAYER_ARN:-}"
+SAFETY_KEY=$(upload_code careconnect-deterministic-safety)
+TOOLS_KEY=$(upload_code careconnect-mock-hospital-tools)
 deploy careconnect-lambdas careconnect-lambdas.yaml "CodeBucket=$BUCKET" "$LAYER" \
-  "SafetyCodeKey=$(upload_code careconnect-deterministic-safety)" \
-  "ToolsCodeKey=$(upload_code careconnect-mock-hospital-tools)"
-deploy careconnect-gateway careconnect-gateway.yaml \
-  "ToolsFunctionArn=$(output careconnect-lambdas ToolsFunctionArn)"
+  "SafetyCodeKey=$SAFETY_KEY" "ToolsCodeKey=$TOOLS_KEY"
+TOOLS_ARN=$(output careconnect-lambdas ToolsFunctionArn)
+deploy careconnect-gateway careconnect-gateway.yaml "ToolsFunctionArn=$TOOLS_ARN"
 
 RUNTIME_ARN=$(bash "$ROOT/scripts/deploy-runtime.sh" careconnect-data careconnect-bedrock careconnect-gateway "$REGION")
 
 # The API stack sets the proxy's ALLOWED_ORIGIN to its own CloudFront domain.
+PROXY_KEY=$(upload_code careconnect-agentcore-proxy)
 deploy careconnect-api careconnect-api.yaml "CodeBucket=$BUCKET" "$LAYER" \
-  "ProxyCodeKey=$(upload_code careconnect-agentcore-proxy)" "AgentRuntimeArn=$RUNTIME_ARN"
+  "ProxyCodeKey=$PROXY_KEY" "AgentRuntimeArn=$RUNTIME_ARN"
 
 API_URL=$(output careconnect-api ApiUrl)
 mkdir -p "$WORK/frontend"
 cp -R "$ROOT/src/frontend/." "$WORK/frontend/"
 sed -E "s#API_URL: \"[^\"]*\"#API_URL: \"${API_URL}\"#" "$ROOT/src/frontend/config.js" > "$WORK/frontend/config.js"
-aws s3 sync "$WORK/frontend" "s3://$(output careconnect-api FrontendBucketName)/" --delete --region "$REGION"
-aws cloudfront create-invalidation --distribution-id "$(output careconnect-api DistributionId)" --paths '/*' >/dev/null
+WEB_BUCKET=$(output careconnect-api FrontendBucketName)
+DIST_ID=$(output careconnect-api DistributionId)
+DOMAIN=$(output careconnect-api CloudFrontDomain)
+aws s3 sync "$WORK/frontend" "s3://$WEB_BUCKET/" --delete --region "$REGION"
+aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths '/*' >/dev/null
 
-echo "OK: https://$(output careconnect-api CloudFrontDomain) calls $API_URL"
+echo "OK: https://$DOMAIN calls $API_URL"
