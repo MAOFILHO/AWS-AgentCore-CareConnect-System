@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CareConnect</title>
+  <style>
+    #question { display: block; width: 100%; max-width: 40rem; box-sizing: border-box; font: inherit; }
+    button { display: block; margin-top: 0.5rem; }
+  </style>
 </head>
 <body>
   <h1>CareConnect</h1>
   <form id="chat-form">
     <label for="question">Your question</label>
-    <input id="question" name="question" autocomplete="off" required>
+    <textarea id="question" name="question" rows="4" autocomplete="off" required></textarea>
     <button type="submit">Ask</button>
   </form>
   <div id="reply" aria-live="polite"></div>
