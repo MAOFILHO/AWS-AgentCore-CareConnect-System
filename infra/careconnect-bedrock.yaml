@@ -1,0 +1,169 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CareConnect Bedrock stack (issue 95): Patient Safety Guardrail with a published version, S3 Vectors bucket and index, and a Knowledge Base with an S3 data source on approved/. CloudFormation has no ingestion-job resource, so run scripts/start_ingestion.py <stack-name> after deploy. Deploy with 'aws cloudformation deploy --capabilities CAPABILITY_IAM'; delete with 'aws cloudformation delete-stack'. (JSON is valid YAML, so the template loads without a YAML dependency.)",
+  "Parameters": {
+    "ApprovedDocsBucketName": {
+      "Type": "String",
+      "Description": "Approved-docs bucket from the data stack output ApprovedDocsBucketName."
+    }
+  },
+  "Resources": {
+    "Guardrail": {
+      "Type": "AWS::Bedrock::Guardrail",
+      "Properties": {
+        "Name": "careconnect-patient-safety",
+        "Description": "Blocks clinical advice topics and masks patient identifiers.",
+        "BlockedInputMessaging": "I can't help with that here. A licensed clinician will follow up.",
+        "BlockedOutputsMessaging": "I can't share that here. A licensed clinician will follow up.",
+        "TopicPolicyConfig": {
+          "TopicsConfig": [
+            {"Name": "Diagnosis", "Type": "DENY", "Definition": "Identifying or suggesting what illness or condition a patient has from symptoms or results."},
+            {"Name": "Dosage", "Type": "DENY", "Definition": "How much of a medication to take, how often, or how to change a dose."},
+            {"Name": "Treatment", "Type": "DENY", "Definition": "Recommending or advising on medical treatment, therapy, procedures or medication choices."},
+            {"Name": "Triage", "Type": "DENY", "Definition": "Judging how urgent a medical problem is or whether to seek emergency care."}
+          ]
+        },
+        "SensitiveInformationPolicyConfig": {
+          "PiiEntitiesConfig": [
+            {"Type": "NAME", "Action": "ANONYMIZE"},
+            {"Type": "EMAIL", "Action": "ANONYMIZE"},
+            {"Type": "PHONE", "Action": "ANONYMIZE"},
+            {"Type": "ADDRESS", "Action": "ANONYMIZE"},
+            {"Type": "US_SOCIAL_SECURITY_NUMBER", "Action": "ANONYMIZE"}
+          ],
+          "RegexesConfig": [
+            {"Name": "MRN", "Description": "Medical record number", "Pattern": "\\bMRN[-: ]?\\d{6,10}\\b", "Action": "ANONYMIZE"}
+          ]
+        },
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "95"}
+        ]
+      }
+    },
+    "GuardrailVersion": {
+      "Type": "AWS::Bedrock::GuardrailVersion",
+      "Properties": {
+        "GuardrailIdentifier": {"Fn::GetAtt": ["Guardrail", "GuardrailId"]},
+        "Description": "Published by the Bedrock stack"
+      }
+    },
+    "VectorBucket": {
+      "Type": "AWS::S3Vectors::VectorBucket",
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "VectorBucketName": {"Fn::Sub": "careconnect-vectors-${AWS::AccountId}-${AWS::Region}"},
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "95"}
+        ]
+      }
+    },
+    "VectorIndex": {
+      "Type": "AWS::S3Vectors::Index",
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "IndexName": "careconnect-approved-docs",
+        "VectorBucketArn": {"Ref": "VectorBucket"},
+        "DataType": "float32",
+        "Dimension": 1024,
+        "DistanceMetric": "cosine",
+        "MetadataConfiguration": {
+          "NonFilterableMetadataKeys": ["AMAZON_BEDROCK_TEXT", "AMAZON_BEDROCK_METADATA"]
+        },
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "95"}
+        ]
+      }
+    },
+    "KnowledgeBaseRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {"Service": "bedrock.amazonaws.com"},
+              "Action": "sts:AssumeRole",
+              "Condition": {"StringEquals": {"aws:SourceAccount": {"Ref": "AWS::AccountId"}}}
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "careconnect-knowledge-base",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "bedrock:InvokeModel",
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"}
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:s3:::${ApprovedDocsBucketName}"}
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:GetObject",
+                  "Resource": {"Fn::Sub": "arn:${AWS::Partition}:s3:::${ApprovedDocsBucketName}/approved/*"}
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3vectors:GetIndex", "s3vectors:QueryVectors", "s3vectors:PutVectors", "s3vectors:GetVectors", "s3vectors:DeleteVectors"],
+                  "Resource": {"Fn::GetAtt": ["VectorIndex", "IndexArn"]}
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "95"}
+        ]
+      }
+    },
+    "KnowledgeBase": {
+      "Type": "AWS::Bedrock::KnowledgeBase",
+      "Properties": {
+        "Name": "careconnect-approved-docs",
+        "RoleArn": {"Fn::GetAtt": ["KnowledgeBaseRole", "Arn"]},
+        "KnowledgeBaseConfiguration": {
+          "Type": "VECTOR",
+          "VectorKnowledgeBaseConfiguration": {
+            "EmbeddingModelArn": {"Fn::Sub": "arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"}
+          }
+        },
+        "StorageConfiguration": {
+          "Type": "S3_VECTORS",
+          "S3VectorsConfiguration": {"IndexArn": {"Ref": "VectorIndex"}}
+        },
+        "Tags": {"Project": "careconnect", "issue": "95"}
+      }
+    },
+    "DataSource": {
+      "Type": "AWS::Bedrock::DataSource",
+      "Properties": {
+        "KnowledgeBaseId": {"Ref": "KnowledgeBase"},
+        "Name": "approved-docs",
+        "DataSourceConfiguration": {
+          "Type": "S3",
+          "S3Configuration": {
+            "BucketArn": {"Fn::Sub": "arn:${AWS::Partition}:s3:::${ApprovedDocsBucketName}"},
+            "InclusionPrefixes": ["approved/"]
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "KnowledgeBaseId": {"Value": {"Ref": "KnowledgeBase"}},
+    "DataSourceId": {"Value": {"Fn::GetAtt": ["DataSource", "DataSourceId"]}},
+    "GuardrailId": {"Value": {"Fn::GetAtt": ["Guardrail", "GuardrailId"]}},
+    "GuardrailVersion": {"Value": {"Fn::GetAtt": ["GuardrailVersion", "Version"]}}
+  }
+}
