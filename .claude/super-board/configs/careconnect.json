@@ -28,8 +28,8 @@
   "verify_commands": [
     "(npm ci || npm install) && python3 -m pip install -q -r requirements.txt && npm test && PYTHONPATH=src python3 -m unittest discover -s test"
   ],
-  "max_workers": 0,
-  "rebuild_cap": 2,
+  "max_workers": 3,
+  "rebuild_cap": 3,
   "block_rate_alert_pct": 30,
   "collect": { "sources": ["github", "prs", "architecture"], "window_days": 14 },
   "notifications": { "channel": "session", "bot_identity": "MAOFILHO" }
