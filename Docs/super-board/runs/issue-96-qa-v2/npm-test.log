@@ -1,0 +1,10 @@
+✔ a drive-attempt comment from another author is ignored (0.074666ms)
+✔ the factory's own drive-attempt comment is read (0.059708ms)
+ℹ tests 69
+ℹ suites 0
+ℹ pass 69
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 986.938833
