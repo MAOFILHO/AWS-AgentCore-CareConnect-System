@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploy the Supervisor to AgentCore Runtime with the five CARECONNECT_* values read from stack outputs.
 # Usage: scripts/deploy-runtime.sh [data-stack] [bedrock-stack] [gateway-stack] [region]
-# Run from the repo root after 'agentcore' is configured for the Supervisor agent.
+# agentcore reads .bedrock_agentcore.yaml from the repo root.
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
 DATA_STACK="${1:-careconnect-data}"
 BEDROCK_STACK="${2:-careconnect-bedrock}"
@@ -42,4 +43,7 @@ if [ -z "$arn" ]; then
   echo "ERROR: no runtime ARN in agentcore deploy output" >&2
   exit 1
 fi
+# agentcore deploy has no tag option; tag the runtime it created.
+aws bedrock-agentcore-control tag-resource --resource-arn "$arn" --region "$REGION" \
+  --tags Project=careconnect,issue=152 >&2
 echo "$arn"
