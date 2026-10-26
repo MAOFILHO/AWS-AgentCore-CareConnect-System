@@ -16,6 +16,7 @@ class ReadmeTest(unittest.TestCase):
 
     def test_referenced_paths_exist(self):
         paths = set(re.findall(r"`((?:scripts|src|test|Docs|infra)/[\w./-]+|[A-Z]+\.md)`", README))
+        paths |= set(re.findall(r"\bscripts/[\w./-]+", README))
         self.assertTrue(paths)
         for p in paths:
             self.assertTrue((ROOT / p).exists(), p)
