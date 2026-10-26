@@ -71,6 +71,29 @@ class LambdaTemplateTest(unittest.TestCase):
     def test_pydantic_layer_is_a_parameter(self):
         self.assertIn("PydanticLayerArn", template["Parameters"])
 
+    def test_handlers_come_from_lambda_functions_dir(self):
+        source = TEMPLATE.parent.parent / "Docs/Repo/lambda-functions"
+        params = template["Parameters"]
+        for f in of_type("AWS::Lambda::Function").values():
+            props = f["Properties"]
+            module, handler = props["Handler"].split(".")
+            code = (source / props["FunctionName"] / f"{module}.py").read_text()
+            self.assertIn(f"def {handler}(", code, props["FunctionName"])
+            key = params[props["Code"]["S3Key"]["Ref"]]["Default"]
+            self.assertEqual(key, props["FunctionName"] + ".zip")
+
+    def test_each_role_writes_only_its_own_log_group(self):
+        for f in of_type("AWS::Lambda::Function").values():
+            props = f["Properties"]
+            role = resources[props["Role"]["GetAtt"].split(".")[0]]
+            for policy in role["Properties"]["Policies"]:
+                for st in policy["PolicyDocument"]["Statement"]:
+                    group = st["Resource"]["Sub"].split(".")[0].lstrip("${")
+                    self.assertEqual(
+                        resources[group]["Properties"]["LogGroupName"],
+                        "/aws/lambda/" + props["FunctionName"],
+                    )
+
     def test_outputs_are_both_function_arns(self):
         self.assertEqual(
             {o["Value"]["GetAtt"].split(".")[0] for o in template["Outputs"].values()},
