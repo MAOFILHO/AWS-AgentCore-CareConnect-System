@@ -11,6 +11,7 @@ from careconnect.fakes import (
     FakeGrounding,
     FakeGuardrail,
     FakeKnowledgeBase,
+    FakeRelevance,
 )
 from careconnect.ingest import load_approved
 from careconnect.safety_gate import sanitize_retrieved
@@ -23,7 +24,7 @@ UNTRUSTED = DOCS / "evaluation-untrusted"
 def run(kb, request):
     return supervisor_flow(
         request, kb, FakeEscalationTicketStore(), FakeGrounding(), FakeGuardrail(),
-        FakeDocumentProcessor(), workflow=FakeApprovalWorkflow(), approved=set(load_approved(DOCS)),
+        FakeDocumentProcessor(), relevance=FakeRelevance(), workflow=FakeApprovalWorkflow(), approved=set(load_approved(DOCS)),
         cost_meter=FakeCostMeter(),
     )
 

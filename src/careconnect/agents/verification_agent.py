@@ -5,20 +5,21 @@ Riverside Health patient-support assistant (console/CLI build).
 
 WHAT THIS AGENT DOES
   It is the final safety reviewer. Before a drafted answer reaches a patient, it
-  checks FOUR things:
+  checks FIVE things:
     1. Citations — does the answer cite a source that is actually in the evidence?
     2. Deterministic safety — does it trip clinical/urgent/injection/PII flags?
     3. Guardrail — does the Bedrock Guardrail allow it?
     4. Grounding — is every claim supported by the approved evidence?
-  It returns PASS only if all four are satisfied. It never rewrites the answer.
+    5. Relevance — does the answer address the patient's request?
+  It returns PASS only if all five are satisfied. It never rewrites the answer.
 
 HOW TO USE
   1. Set your Guardrail ID and version:
          export CARECONNECT_GUARDRAIL_ID="<YOUR_GUARDRAIL_ID>"          # <-- UPDATE THIS
          export CARECONNECT_GUARDRAIL_VERSION="<YOUR_GUARDRAIL_VERSION>" # <-- UPDATE THIS
-  2. Put the drafted answer and the evidence in two files.
+  2. Put the drafted answer, the evidence and the patient request in three files.
   3. Run it with their paths:
-         PYTHONPATH=src python3 -m careconnect.agents.verification_agent DRAFT_FILE EVIDENCE_FILE
+         PYTHONPATH=src python3 -m careconnect.agents.verification_agent DRAFT_FILE EVIDENCE_FILE REQUEST_FILE
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
   - CARECONNECT_GUARDRAIL_ID / _VERSION: must be YOUR guardrail values.
@@ -129,6 +130,13 @@ class GroundingResult(BaseModel):
     )
 
 
+class RelevanceResult(BaseModel):
+    relevant: bool = Field(
+        description="True only when the draft answers what the patient asked."
+    )
+    reason: str = Field(description="Short explanation of the relevance result.")
+
+
 # ---------------------------------------------------------------------------
 # The verifier model. It only verifies — it never answers or rewrites.
 # ---------------------------------------------------------------------------
@@ -211,13 +219,35 @@ Do not use outside knowledge.
 
 
 # ---------------------------------------------------------------------------
-# Combine all four checks into a single PASS/FAIL verdict with details.
+# Check 5 — relevance: ask the verifier model if the draft addresses the request.
+# A reply that is not a RelevanceResult counts as not relevant.
 # ---------------------------------------------------------------------------
-def verify(answer, evidence, safety: SafetyLambda | None = None, guardrail: Guardrail | None = None):
+def run_relevance_check(request, answer):
+    prompt = f"""
+Decide whether the draft response answers what the patient asked.
+<patient_request>
+{request}
+</patient_request>
+<draft_response>
+{answer}
+</draft_response>
+Answer false when the draft is about a different topic than the request.
+"""
+    result = get_verification_agent()(prompt, structured_output_model=RelevanceResult).structured_output
+    if isinstance(result, RelevanceResult):
+        return result
+    return RelevanceResult(relevant=False, reason="unparseable relevance reply")
+
+
+# ---------------------------------------------------------------------------
+# Combine all five checks into a single PASS/FAIL verdict with details.
+# ---------------------------------------------------------------------------
+def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardrail: Guardrail | None = None):
     citation_result = check_citations(answer, evidence)
     deterministic_result = run_deterministic_safety(answer, safety)
     guardrail_result = run_guardrail(answer, guardrail)
     grounding_result = run_grounding_check(answer, evidence)
+    relevance_result = run_relevance_check(request, answer)
 
     classification = deterministic_result.get("classification", {})
     clinical_detected = classification.get("clinical", False)
@@ -232,6 +262,7 @@ def verify(answer, evidence, safety: SafetyLambda | None = None, guardrail: Guar
             citation_result["citation_present"],
             citation_result["citation_valid"],
             grounding_result.grounded,
+            relevance_result.relevant,
             not clinical_detected,
             not urgent_detected,
             not injection_detected,
@@ -248,6 +279,7 @@ def verify(answer, evidence, safety: SafetyLambda | None = None, guardrail: Guar
             "unsupported_claims": grounding_result.unsupported_claims,
             "reason": grounding_result.reason,
         },
+        "relevance_check": relevance_result.model_dump(),
         "deterministic_safety": {
             "clinical": clinical_detected,
             "urgent": urgent_detected,
@@ -259,15 +291,17 @@ def verify(answer, evidence, safety: SafetyLambda | None = None, guardrail: Guar
 
 
 # ---------------------------------------------------------------------------
-# Read the draft answer and the evidence from the two files named on the command line, then verify.
+# Read the draft answer, the evidence and the request from the three files named on the command line, then verify.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    draft_path, evidence_path = sys.argv[1:3]
+    draft_path, evidence_path, request_path = sys.argv[1:4]
     with open(draft_path, "r", encoding="utf-8") as file:
         answer = file.read()
     with open(evidence_path, "r", encoding="utf-8") as file:
         evidence = file.read()
+    with open(request_path, "r", encoding="utf-8") as file:
+        request = file.read()
 
-    result = verify(answer, evidence)
+    result = verify(request, answer, evidence)
     print("\nCareConnect Verification Result\n")
     print(json.dumps(result, indent=2))

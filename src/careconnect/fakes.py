@@ -60,6 +60,29 @@ class FakeGrounding:
         )
 
 
+class AnyHitKnowledgeBase(FakeKnowledgeBase):
+    """Retrieval returns its best match even when nothing relevant exists."""
+
+    def retrieve(self, query):
+        return list(self.documents.items())
+
+
+STOPWORDS = {"a", "an", "and", "are", "for", "in", "is", "of", "the", "to", "what", "when", "where"}
+
+
+class FakeRelevance:
+    """Relevance check: the draft must share a content word with the request."""
+
+    def __init__(self, error=False):
+        self.error = error
+
+    def check(self, request, draft):
+        if self.error:
+            raise RuntimeError("relevance unavailable")
+        words = lambda text: set(re.findall(r"[a-z0-9]+", text.lower())) - STOPWORDS
+        return bool(words(request) & words(draft))
+
+
 class FakeGuardrail:
     def __init__(self, allow=True, error=False):
         self.allow = allow
