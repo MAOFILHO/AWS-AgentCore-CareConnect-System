@@ -50,25 +50,28 @@ class VerificationInterfaceTest(unittest.TestCase):
 
 
 class RelevanceCheckTest(unittest.TestCase):
+    def reply(self, relevant):
+        return mock.Mock(structured_output=agent.RelevanceResult(relevant=relevant, reason="r"))
+
     def check(self, reply):
         with mock.patch.object(agent, "get_verification_agent", return_value=mock.Mock(return_value=reply)):
             return agent.run_relevance_check("parking", "Visiting is 11:00-20:00.")
 
     def test_a_parsed_reply_is_the_result(self):
-        self.assertTrue(self.check('{"relevant": true, "reason": "on topic"}').relevant)
-        self.assertFalse(self.check('{"relevant": false, "reason": "other topic"}').relevant)
+        self.assertTrue(self.check(self.reply(True)).relevant)
+        self.assertFalse(self.check(self.reply(False)).relevant)
 
-    def test_a_reply_that_does_not_parse_is_not_relevant(self):
-        for reply in ("yes", "", '{"relevant": "maybe", "reason": "x"}', '{"reason": "x"}', '```json\n{}\n```'):
-            with self.subTest(reply):
-                self.assertFalse(self.check(reply).relevant)
+    def test_a_reply_that_is_not_a_relevance_result_is_not_relevant(self):
+        for output in (None, "yes", {"relevant": True}):
+            with self.subTest(output):
+                self.assertFalse(self.check(mock.Mock(structured_output=output)).relevant)
 
     def test_verify_fails_when_the_draft_is_not_relevant(self):
         draft = "Visiting is 11:00-20:00.\nSource:\ns3://docs/approved/v.md"
         grounded = mock.Mock(structured_output=mock.Mock(grounded=True, unsupported_claims=[], reason="ok"))
         verdicts = {}
         for relevant in (True, False):
-            model = mock.Mock(side_effect=[grounded, '{"relevant": %s, "reason": "r"}' % str(relevant).lower()])
+            model = mock.Mock(side_effect=[grounded, self.reply(relevant)])
             with mock.patch.object(agent, "get_verification_agent", return_value=model):
                 verdicts[relevant] = agent.verify(
                     "visiting hours", draft, draft, FakeSafetyLambda(), FakeGuardrail()

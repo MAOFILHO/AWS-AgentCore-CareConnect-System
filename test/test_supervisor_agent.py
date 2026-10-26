@@ -48,9 +48,9 @@ class DeployableSupervisorTest(unittest.TestCase):
     def test_consecutive_flows_verify_their_own_evidence(self):
         other = "Parking is free.\nSource:\ns3://docs/approved/parking.md"
         self.flow("visiting hours")
-        first = self.verify.call_args.args[1]
+        first = self.verify.call_args.args[2]
         self.flow("parking", passages=other)
-        second = self.verify.call_args.args[1]
+        second = self.verify.call_args.args[2]
         self.assertIn("11:00", first)
         self.assertIn("Parking is free", second)
         self.assertNotIn("11:00", second)

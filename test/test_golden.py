@@ -5,6 +5,7 @@ from unittest import mock
 
 from careconnect.agents import supervisor_agent
 from careconnect.fakes import (
+    AnyHitKnowledgeBase,
     FakeApprovalWorkflow,
     FakeCostMeter,
     FakeEscalationTicketStore,
@@ -326,10 +327,6 @@ class GoldenScenarioTest(unittest.TestCase):
 
 class UnrelatedAnswerGoldenTest(unittest.TestCase):
     def test_cited_answer_that_does_not_address_the_request_escalates(self):
-        class AnyHitKnowledgeBase(FakeKnowledgeBase):
-            def retrieve(self, query):
-                return list(self.documents.items())
-
         documents = {"visiting-hours-and-policy.md": (APPROVED / "visiting-hours-and-policy.md").read_text()}
         tickets = FakeEscalationTicketStore()
         out = supervisor_flow(

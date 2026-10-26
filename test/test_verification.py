@@ -1,6 +1,7 @@
 import unittest
 
 from careconnect.fakes import (
+    AnyHitKnowledgeBase,
     FakeApprovalWorkflow,
     FakeCostMeter,
     FakeEscalationTicketStore,
@@ -13,13 +14,6 @@ from careconnect.supervisor import ESCALATION_NOTICE, UNVERIFIED_REASON, supervi
 from careconnect.verification import verify
 
 DOCS = {"visiting-hours-and-policy.md": "General ward visiting hours are 11:00-20:00."}
-
-
-class AnyHitKnowledgeBase(FakeKnowledgeBase):
-    """Retrieval returns its best match even when nothing relevant exists."""
-
-    def retrieve(self, query):
-        return list(self.documents.items())
 
 
 class VerificationGateTest(unittest.TestCase):

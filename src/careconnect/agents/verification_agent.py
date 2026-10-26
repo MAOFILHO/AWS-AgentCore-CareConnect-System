@@ -34,7 +34,7 @@ import re
 import sys
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Configuration. UPDATE REGION if you did not build in us-east-1.
@@ -220,7 +220,7 @@ Do not use outside knowledge.
 
 # ---------------------------------------------------------------------------
 # Check 5 — relevance: ask the verifier model if the draft addresses the request.
-# A reply that does not parse as RelevanceResult counts as not relevant.
+# A reply that is not a RelevanceResult counts as not relevant.
 # ---------------------------------------------------------------------------
 def run_relevance_check(request, answer):
     prompt = f"""
@@ -231,14 +231,12 @@ Decide whether the draft response answers what the patient asked.
 <draft_response>
 {answer}
 </draft_response>
-Reply with only a JSON object: {{"relevant": true or false, "reason": "<short reason>"}}.
 Answer false when the draft is about a different topic than the request.
 """
-    reply = str(get_verification_agent()(prompt))
-    try:
-        return RelevanceResult.model_validate_json(reply)
-    except ValidationError:
-        return RelevanceResult(relevant=False, reason="unparseable relevance reply")
+    result = get_verification_agent()(prompt, structured_output_model=RelevanceResult).structured_output
+    if isinstance(result, RelevanceResult):
+        return result
+    return RelevanceResult(relevant=False, reason="unparseable relevance reply")
 
 
 # ---------------------------------------------------------------------------
