@@ -31,6 +31,8 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 import json
 import os
 import re
+from typing import Protocol, runtime_checkable
+
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -54,6 +56,55 @@ def aws_client(service):
     import boto3
 
     return boto3.client(service, region_name=REGION)
+
+
+# ---------------------------------------------------------------------------
+# The two AWS calls this agent makes, as small interfaces. The boto3 adapters
+# are the defaults; tests use the fakes from careconnect.fakes.
+# ---------------------------------------------------------------------------
+@runtime_checkable
+class SafetyLambda(Protocol):
+    def classify(self, text: str) -> dict: ...
+
+
+@runtime_checkable
+class Guardrail(Protocol):
+    def apply(self, text: str) -> dict: ...
+
+
+# UPDATE FunctionName if you named the Lambda differently.
+class LambdaSafety:
+    def __init__(self, client=None):
+        self.client = client
+
+    def classify(self, text):
+        client = self.client or aws_client("lambda")
+        response = client.invoke(
+            FunctionName="careconnect-deterministic-safety",
+            InvocationType="RequestResponse",
+            Payload=json.dumps({"text": text}).encode("utf-8"),
+        )
+        return json.loads(response["Payload"].read())
+
+
+class BedrockGuardrail:
+    def __init__(self, client=None):
+        self.client = client
+
+    def apply(self, text):
+        guardrail_id, guardrail_version = get_guardrail_settings()
+        client = self.client or aws_client("bedrock-runtime")
+        response = client.apply_guardrail(
+            guardrailIdentifier=guardrail_id,
+            guardrailVersion=guardrail_version,
+            source="OUTPUT",
+            content=[{"text": {"text": text}}],
+            outputScope="FULL",
+        )
+        return {
+            "action": response.get("action"),
+            "reason": response.get("actionReason", ""),
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -127,35 +178,16 @@ def check_citations(answer, evidence):
 
 # ---------------------------------------------------------------------------
 # Check 2 — deterministic safety: call the safety Lambda on the answer text.
-# UPDATE FunctionName if you named the Lambda differently.
 # ---------------------------------------------------------------------------
-def run_deterministic_safety(answer):
-    payload = {"text": answer}
-    response = aws_client("lambda").invoke(
-        FunctionName="careconnect-deterministic-safety",
-        InvocationType="RequestResponse",
-        Payload=json.dumps(payload).encode("utf-8"),
-    )
-    result = json.loads(response["Payload"].read())
-    return result
+def run_deterministic_safety(answer, safety: SafetyLambda | None = None):
+    return (safety or LambdaSafety()).classify(answer)
 
 
 # ---------------------------------------------------------------------------
 # Check 3 — Guardrail: ask the Bedrock Guardrail whether the answer is allowed.
 # ---------------------------------------------------------------------------
-def run_guardrail(answer):
-    guardrail_id, guardrail_version = get_guardrail_settings()
-    response = aws_client("bedrock-runtime").apply_guardrail(
-        guardrailIdentifier=guardrail_id,
-        guardrailVersion=guardrail_version,
-        source="OUTPUT",
-        content=[{"text": {"text": answer}}],
-        outputScope="FULL",
-    )
-    return {
-        "action": response.get("action"),
-        "reason": response.get("actionReason", ""),
-    }
+def run_guardrail(answer, guardrail: Guardrail | None = None):
+    return (guardrail or BedrockGuardrail()).apply(answer)
 
 
 # ---------------------------------------------------------------------------
@@ -181,10 +213,10 @@ Do not use outside knowledge.
 # ---------------------------------------------------------------------------
 # Combine all four checks into a single PASS/FAIL verdict with details.
 # ---------------------------------------------------------------------------
-def verify(answer, evidence):
+def verify(answer, evidence, safety: SafetyLambda | None = None, guardrail: Guardrail | None = None):
     citation_result = check_citations(answer, evidence)
-    deterministic_result = run_deterministic_safety(answer)
-    guardrail_result = run_guardrail(answer)
+    deterministic_result = run_deterministic_safety(answer, safety)
+    guardrail_result = run_guardrail(answer, guardrail)
     grounding_result = run_grounding_check(answer, evidence)
 
     classification = deterministic_result.get("classification", {})

@@ -70,6 +70,19 @@ class FakeGuardrail:
             raise RuntimeError("guardrail unavailable")
         return self.allow
 
+    def apply(self, text):
+        if self.error:
+            raise RuntimeError("guardrail unavailable")
+        return {"action": "NONE" if self.allow else "GUARDRAIL_INTERVENED", "reason": ""}
+
+
+class FakeSafetyLambda:
+    def __init__(self, classification=None):
+        self.classification = classification or {}
+
+    def classify(self, text):
+        return {"classification": self.classification}
+
 
 class FakeCostMeter:
     def __init__(self, cost_per_step=0.0):
