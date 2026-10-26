@@ -28,6 +28,10 @@ if [ "$1 $2" = "bedrock-agentcore-control list-agent-runtimes" ]; then
   echo "$FAKE_ARN"
   exit 0
 fi
+if [ "$1 $2" = "bedrock-agentcore-control get-agent-runtime" ]; then
+  echo "arn:aws:iam::000000000000:role/RuntimeRole"
+  exit 0
+fi
 stack=""; query=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -48,6 +52,7 @@ case "$stack/$key" in
   careconnect-bedrock/GuardrailVersion) echo "1" ;;
   careconnect-lambdas/ToolsFunctionArn) echo "arn:aws:lambda:us-east-1:000000000000:function:tools" ;;
   careconnect-gateway/GatewayUrl) echo "https://gw.example/mcp" ;;
+  careconnect-gateway/GatewayId) echo "gw-123" ;;
   careconnect-api/ApiUrl) echo "$FAKE_API_URL" ;;
   careconnect-api/FrontendBucketName) echo "web-bucket" ;;
   careconnect-api/DistributionId) echo "DIST123" ;;

@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -10,12 +11,23 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts/deploy-runtime.sh"
 ARN = "arn:aws:bedrock-agentcore:us-east-1:000000000000:runtime/careconnect_supervisor-abc123"
+KB_ARN = "arn:aws:bedrock:us-east-1:000000000000:knowledge-base/KB12345678"
+WORKFLOW_ARN = "arn:aws:states:us-east-1:000000000000:stateMachine:wf"
+GATEWAY_ARN = "arn:aws:bedrock-agentcore:us-east-1:000000000000:gateway/gw-123"
 
 # Fake aws: answers describe-stacks by stack name and output key; "empty" simulates a missing output.
 FAKE_AWS = r"""#!/usr/bin/env bash
 echo "aws $*" >> "$FAKE_LOG"
 if [ "$1" = bedrock-agentcore-control ] && [ "$2" = list-agent-runtimes ]; then
   case "$*" in *"=='careconnectsupervisor'"*) echo "$FAKE_ARN" ;; *) echo "None" ;; esac
+  exit 0
+fi
+if [ "$1" = bedrock-agentcore-control ] && [ "$2" = get-agent-runtime ]; then
+  echo "arn:aws:iam::000000000000:role/service-role/RuntimeRole"
+  exit 0
+fi
+if [ "$1" = iam ] && [ "$2" = put-role-policy ]; then
+  while [ $# -gt 0 ]; do [ "$1" = --policy-document ] && echo "$2" > "$FAKE_POLICY"; shift; done
   exit 0
 fi
 stack=""; query=""
@@ -33,6 +45,7 @@ case "$stack/$key" in
   bedrock/GuardrailVersion) echo "1" ;;
   data/ApprovalWorkflowArn) echo "arn:aws:states:us-east-1:000000000000:stateMachine:wf" ;;
   gateway/GatewayUrl) echo "$FAKE_GATEWAY_URL" ;;
+  gateway/GatewayId) echo "$FAKE_GATEWAY_ID" ;;
   *) echo "None" ;;
 esac
 """
@@ -50,7 +63,7 @@ echo "| ${FAKE_ARN:60} |"
 
 
 class DeployRuntimeTest(unittest.TestCase):
-    def run_script(self, gateway_url="https://gw.example/mcp", arn=ARN):
+    def run_script(self, gateway_url="https://gw.example/mcp", arn=ARN, gateway_id="gw-123"):
         with tempfile.TemporaryDirectory() as tmp:
             bindir = Path(tmp) / "bin"
             bindir.mkdir()
@@ -58,17 +71,21 @@ class DeployRuntimeTest(unittest.TestCase):
                 (bindir / name).write_text(body)
                 (bindir / name).chmod(0o755)
             log = Path(tmp) / "log"
+            policy = Path(tmp) / "policy.json"
             env = {
                 **os.environ,
                 "PATH": f"{bindir}:{os.environ['PATH']}",
                 "FAKE_LOG": str(log),
                 "FAKE_GATEWAY_URL": gateway_url,
+                "FAKE_GATEWAY_ID": gateway_id,
                 "FAKE_ARN": arn,
+                "FAKE_POLICY": str(policy),
             }
             proc = subprocess.run(
                 ["bash", str(SCRIPT), "data", "bedrock", "gateway"],
                 capture_output=True, text=True, env=env, cwd=tmp,
             )
+            self.policy = json.loads(policy.read_text()) if policy.exists() else None
             return proc, log.read_text() if log.exists() else ""
 
     def test_deploys_with_the_five_values_and_prints_the_arn(self):
@@ -88,6 +105,37 @@ class DeployRuntimeTest(unittest.TestCase):
         self.assertIn("--region us-east-1", log)
         self.assertIn(f"tag-resource --resource-arn {ARN} --region us-east-1 "
                       "--tags Project=careconnect,issue=152", log)
+
+    def test_grants_the_runtime_role_retrieve_start_execution_and_invoke_gateway(self):
+        proc, log = self.run_script()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("--agent-runtime-id careconnect_supervisor-abc123", log)
+        self.assertIn("iam put-role-policy --role-name RuntimeRole", log)
+        self.assertIn("iam tag-role --role-name RuntimeRole "
+                      "--tags Key=Project,Value=careconnect Key=issue,Value=156", log)
+        grants = {s["Action"]: s["Resource"] for s in self.policy["Statement"]}
+        self.assertEqual(grants, {
+            "bedrock:Retrieve": KB_ARN,
+            "states:StartExecution": WORKFLOW_ARN,
+            "bedrock-agentcore:InvokeGateway": GATEWAY_ARN,
+        })
+
+    def test_policy_has_no_wildcard_resource(self):
+        self.run_script()
+        for statement in self.policy["Statement"]:
+            self.assertEqual(statement["Effect"], "Allow")
+            self.assertNotIn("*", statement["Resource"])
+
+    def test_no_listed_runtime_grants_nothing(self):
+        proc, log = self.run_script(arn="None")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertNotIn("put-role-policy", log)
+
+    def test_missing_gateway_id_fails_and_grants_nothing(self):
+        proc, log = self.run_script(gateway_id="None")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("GATEWAY_ID", proc.stderr)
+        self.assertNotIn("put-role-policy", log)
 
     def test_empty_value_fails_and_does_not_deploy(self):
         proc, log = self.run_script(gateway_url="")
