@@ -1,0 +1,95 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CareConnect data stack (issue 93): private approved-docs S3 bucket, careconnect-escalations DynamoDB table (on-demand, TTL on expires_at) and the careconnect-human-approval-workflow state machine. Deploy with 'aws cloudformation deploy --capabilities CAPABILITY_IAM'; delete with scripts/destroy-data-stack.sh <stack-name> (it empties the bucket first). (JSON is valid YAML, so the template loads without a YAML dependency.)",
+  "Resources": {
+    "ApprovedDocsBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "BucketName": {"Fn::Sub": "careconnect-approved-docs-${AWS::AccountId}-${AWS::Region}"},
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "93"}
+        ]
+      }
+    },
+    "ApprovedDocsBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {"Ref": "ApprovedDocsBucket"},
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {"Fn::GetAtt": ["ApprovedDocsBucket", "Arn"]},
+                {"Fn::Sub": "${ApprovedDocsBucket.Arn}/*"}
+              ],
+              "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+            }
+          ]
+        }
+      }
+    },
+    "EscalationsTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "careconnect-escalations",
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [{"AttributeName": "ticket_id", "AttributeType": "S"}],
+        "KeySchema": [{"AttributeName": "ticket_id", "KeyType": "HASH"}],
+        "TimeToLiveSpecification": {"AttributeName": "expires_at", "Enabled": true},
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "93"}
+        ]
+      }
+    },
+    "ApprovalWorkflowRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {"Service": "states.amazonaws.com"},
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "93"}
+        ]
+      }
+    },
+    "ApprovalWorkflow": {
+      "Type": "AWS::StepFunctions::StateMachine",
+      "Properties": {
+        "StateMachineName": "careconnect-human-approval-workflow",
+        "StateMachineType": "STANDARD",
+        "RoleArn": {"Fn::GetAtt": ["ApprovalWorkflowRole", "Arn"]},
+        "DefinitionString": "{\"Comment\":\"Placeholder with no approval step yet; the human-approval definition is a follow-up.\",\"StartAt\":\"PendingApproval\",\"States\":{\"PendingApproval\":{\"Type\":\"Pass\",\"Next\":\"Done\"},\"Done\":{\"Type\":\"Succeed\"}}}",
+        "Tags": [
+          {"Key": "Project", "Value": "careconnect"},
+          {"Key": "issue", "Value": "93"}
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ApprovedDocsBucketName": {"Value": {"Ref": "ApprovedDocsBucket"}},
+    "EscalationsTableName": {"Value": {"Ref": "EscalationsTable"}},
+    "ApprovalWorkflowArn": {"Value": {"Ref": "ApprovalWorkflow"}}
+  }
+}
