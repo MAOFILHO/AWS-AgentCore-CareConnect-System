@@ -1,3 +1,4 @@
+import os
 import sys
 import unittest
 from unittest import mock
@@ -196,6 +197,19 @@ class DeployableSupervisorTest(unittest.TestCase):
         out = self.flow("visiting hours", budgets=b, default_meter=True)
         self.assertEqual(out["decision"], "stop")
         self.assertEqual(out["draft_response"], BUDGET_MESSAGE)
+
+    def test_default_meter_prices_every_step_the_flow_takes(self):
+        for text in ("visiting hours", "Please refill my Metformin", "I have chest pain"):
+            with self.subTest(text=text), mock.patch.dict("os.environ"), \
+                    self.assertNoLogs(supervisor_agent.log, "ERROR"):
+                os.environ.pop("CARECONNECT_GATEWAY_URL", None)
+                self.flow(text, default_meter=True)
+
+    def test_default_meter_without_a_price_table_fails_closed(self):
+        out = self.flow("visiting hours", budgets=Budgets(max_steps=8, max_seconds=30, max_cost_usd=0.05),
+                        default_meter=True)
+        self.assertEqual(out["decision"], "escalate")
+        self.assertNotIn("11:00", out["draft_response"])
 
     def test_time_limit_stops_with_budget_message(self):
         ticks = iter(range(0, 1000, 20))
