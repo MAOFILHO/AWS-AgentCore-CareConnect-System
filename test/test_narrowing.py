@@ -66,3 +66,17 @@ class AnswerSentencesTest(unittest.TestCase):
         directory = flatten((APPROVED / "contact-directory.md").read_text())
         out = "\n".join(answer_sentences("What is the pharmacy phone number?", directory))
         self.assertRegex(out, r"\(555\) 010-\d{4}")
+
+    def test_flattened_billing_question_quotes_the_billing_timing_sentence(self):
+        billing = (APPROVED / "billing-faq.md").read_text()
+        out = "\n".join(answer_sentences("When will I get my bill?", flatten(billing)))
+        self.assertIn("within 14 days", out)
+
+    def test_flattened_heading_question_quotes_a_sentence_of_the_line_break_reply(self):
+        for path in sorted(APPROVED.glob("*.md")):
+            text = path.read_text()
+            heading = next(line for line in text.splitlines() if line.startswith("## "))
+            request = heading.lstrip("# ")
+            flat = answer_sentences(request, flatten(text))
+            lines = answer_sentences(request, text)
+            self.assertTrue(any(line in quoted for line in lines for quoted in flat), path.name)
