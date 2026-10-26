@@ -1,6 +1,6 @@
 import unittest
 
-from careconnect.budget import BudgetExceeded, Budgets, BudgetTracker
+from careconnect.budget import BudgetExceeded, Budgets, BudgetTracker, StepPriceMeter, load_budgets
 from careconnect.fakes import FakeCostMeter
 
 
@@ -40,3 +40,19 @@ class BudgetLimitTest(unittest.TestCase):
         t.step("x")
         self.assertEqual(t.steps, 2)
         self.assertEqual(t.cost_meter.total, 0.5)
+
+
+class StepPriceMeterTest(unittest.TestCase):
+    def test_charges_the_configured_price_per_step(self):
+        meter = StepPriceMeter({"Verification Agent": 0.01, "Combine safe results": 0.0})
+        meter.charge("Verification Agent")
+        meter.charge("Combine safe results")
+        meter.charge("Verification Agent")
+        self.assertAlmostEqual(meter.total, 0.02)
+
+    def test_unpriced_step_raises(self):
+        with self.assertRaises(KeyError):
+            StepPriceMeter({}).charge("Verification Agent")
+
+    def test_default_config_prices_model_calls(self):
+        self.assertGreater(load_budgets().step_cost_usd["Verification Agent"], 0)

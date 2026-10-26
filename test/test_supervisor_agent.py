@@ -1,3 +1,4 @@
+import os
 import sys
 import unittest
 from unittest import mock
@@ -11,7 +12,8 @@ PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visitin
 
 
 class DeployableSupervisorTest(unittest.TestCase):
-    def flow(self, text, status="PASS", budgets=None, meter=None, verify_error=None, passages=PASSAGES):
+    def flow(self, text, status="PASS", budgets=None, meter=None, verify_error=None, passages=PASSAGES,
+             default_meter=False):
         verify = mock.Mock(return_value={"verification_status": status}, side_effect=verify_error)
         escalate = mock.Mock(return_value={"ticket_id": "T1", "status": "pending_review"})
         retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
@@ -22,7 +24,7 @@ class DeployableSupervisorTest(unittest.TestCase):
                 mock.patch.dict("os.environ", env), \
                 mock.patch("builtins.open", mock.mock_open(read_data="")):
             out = supervisor_agent.supervisor_flow(
-                text, cost_meter=meter or FakeCostMeter(), budgets=budgets
+                text, cost_meter=None if default_meter else meter or FakeCostMeter(), budgets=budgets
             )
         self.escalate, self.verify = escalate, verify
         return out
@@ -185,6 +187,29 @@ class DeployableSupervisorTest(unittest.TestCase):
     def test_cost_limit_stops_with_budget_message(self):
         out = self.flow("visiting hours", meter=FakeCostMeter(cost_per_step=0.03))
         self.assertEqual(out["draft_response"], BUDGET_MESSAGE)
+
+    def test_default_meter_allows_a_run_under_the_config_cap(self):
+        self.assertEqual(self.flow("visiting hours", default_meter=True)["decision"], "allow")
+
+    def test_default_meter_stops_a_run_over_the_config_cap(self):
+        b = load_budgets()
+        b = b.model_copy(update={"step_cost_usd": {name: 0.03 for name in b.step_cost_usd}})
+        out = self.flow("visiting hours", budgets=b, default_meter=True)
+        self.assertEqual(out["decision"], "stop")
+        self.assertEqual(out["draft_response"], BUDGET_MESSAGE)
+
+    def test_default_meter_prices_every_step_the_flow_takes(self):
+        for text in ("visiting hours", "Please refill my Metformin", "I have chest pain"):
+            with self.subTest(text=text), mock.patch.dict("os.environ"), \
+                    self.assertNoLogs(supervisor_agent.log, "ERROR"):
+                os.environ.pop("CARECONNECT_GATEWAY_URL", None)
+                self.flow(text, default_meter=True)
+
+    def test_default_meter_without_a_price_table_fails_closed(self):
+        out = self.flow("visiting hours", budgets=Budgets(max_steps=8, max_seconds=30, max_cost_usd=0.05),
+                        default_meter=True)
+        self.assertEqual(out["decision"], "escalate")
+        self.assertNotIn("11:00", out["draft_response"])
 
     def test_time_limit_stops_with_budget_message(self):
         ticks = iter(range(0, 1000, 20))
