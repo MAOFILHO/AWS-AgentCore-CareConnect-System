@@ -229,14 +229,11 @@ def combine_safe_results(results, safety, state):
 
 # ---------------------------------------------------------------------------
 # 5. Verify the draft against the SAME passages retrieval returned.
-#    Syncs retrieved_passages.txt so the verifier checks live evidence.
 # ---------------------------------------------------------------------------
 def verify_response(draft, evidence, state):
     state.step("Verification Agent")
     if not evidence.strip():
         return {"verification_status": "SKIPPED", "reason": "no evidence available"}
-    with open("retrieved_passages.txt", "w", encoding="utf-8") as f:
-        f.write(evidence)
     try:
         return verify(draft, evidence)
     except Exception as exc:
