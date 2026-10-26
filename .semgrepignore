@@ -1,0 +1,10 @@
+# Semgrep defaults (a custom file replaces them)
+:include .gitignore
+node_modules/
+test/
+tests/
+*_test.py
+*.test.js
+*.min.js
+# vendored super-board tooling, not CareConnect product code
+.claude/
