@@ -28,14 +28,18 @@ HOW TO DEPLOY (console)
 #     It looks like:
 #     arn:aws:bedrock-agentcore:us-east-1:<ACCOUNT_ID>:runtime/<runtime-id>
 # ===========================================================================
-AGENT_RUNTIME_ARN = "REPLACE_ME_WITH_YOUR_AGENT_RUNTIME_ARN"
+# infra/careconnect-api.yaml sets it through the AGENT_RUNTIME_ARN environment variable.
+import os
+
+AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN", "REPLACE_ME_WITH_YOUR_AGENT_RUNTIME_ARN")
 
 # >>> CHANGE #2: region (leave as-is if your agent is in us-east-1).
 AWS_REGION = "us-east-1"
 
 # >>> CHANGE #3: your CloudFront domain, e.g. "https://dxxxx.cloudfront.net".
 #     Only this origin gets a CORS allowance. Never use "*".
-ALLOWED_ORIGIN = "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN"
+#     infra/careconnect-api.yaml sets it to the CloudFront domain through the environment.
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN")
 
 import json
 import re
