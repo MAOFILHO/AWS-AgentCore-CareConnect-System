@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CareConnect Lambda stack (issue 94): careconnect-deterministic-safety and
+  careconnect-mock-hospital-tools (Python 3.12) with least-privilege execution roles.
+  No provisioned concurrency. The code is the zip files of Docs/Repo/lambda-functions/,
+  uploaded to the S3 bucket named in CodeBucket.
+  Deploy (from the repo root; each zip holds lambda_function.py at its top level):
+    (cd Docs/Repo/lambda-functions/<function-dir> && zip -r /tmp/<name>.zip .)
+    aws s3 cp /tmp/<name>.zip s3://<bucket>/<name>.zip --region us-east-1   (for both functions)
+    aws cloudformation deploy --stack-name careconnect-lambdas --region us-east-1 \
+      --template-file infra/careconnect-lambdas.yaml --capabilities CAPABILITY_IAM \
+      --parameter-overrides CodeBucket=<bucket>
+  The function names and /aws/lambda/careconnect-* log groups are fixed. Delete any
+  functions and log groups made by the console steps or scripts/deploy-wizard.sh before
+  the first deploy, or the stack fails with AlreadyExists and rolls back.
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: S3 bucket that holds the two code zips
+  SafetyCodeKey:
+    Type: String
+    Default: careconnect-deterministic-safety.zip
+    Description: S3 key of the zip with lambda_function.py of careconnect-deterministic-safety
+  ToolsCodeKey:
+    Type: String
+    Default: careconnect-mock-hospital-tools.zip
+    Description: S3 key of the zip with lambda_function.py of careconnect-mock-hospital-tools
+  PydanticLayerArn:
+    Type: String
+    Default: ""
+    Description: ARN of a pydantic v2 layer for Python 3.12. Leave empty if the functions need none.
+
+Conditions:
+  HasPydanticLayer: !Not [!Equals [!Ref PydanticLayerArn, ""]]
+
+Resources:
+  SafetyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/careconnect-deterministic-safety
+      RetentionInDays: 14
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  ToolsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/careconnect-mock-hospital-tools
+      RetentionInDays: 14
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  SafetyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-own-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${SafetyLogGroup.Arn}:*"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  ToolsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-own-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${ToolsLogGroup.Arn}:*"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  SafetyFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SafetyLogGroup
+    Properties:
+      FunctionName: careconnect-deterministic-safety
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt SafetyRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Layers: !If [HasPydanticLayer, [!Ref PydanticLayerArn], !Ref "AWS::NoValue"]
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref SafetyCodeKey
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  ToolsFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ToolsLogGroup
+    Properties:
+      FunctionName: careconnect-mock-hospital-tools
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ToolsRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Layers: !If [HasPydanticLayer, [!Ref PydanticLayerArn], !Ref "AWS::NoValue"]
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref ToolsCodeKey
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+Outputs:
+  SafetyFunctionArn:
+    Value: !GetAtt SafetyFunction.Arn
+  ToolsFunctionArn:
+    Value: !GetAtt ToolsFunction.Arn
