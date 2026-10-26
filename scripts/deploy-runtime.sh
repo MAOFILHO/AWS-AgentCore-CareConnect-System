@@ -52,7 +52,7 @@ fi
 aws bedrock-agentcore-control tag-resource --resource-arn "$arn" --region "$REGION" \
   --tags Project=careconnect,issue=152 >&2
 
-# The toolkit's execution role only allows model calls; grant the four calls the flow makes.
+# The toolkit's execution role only allows model calls; grant the five calls the flow makes.
 account=$(echo "$arn" | cut -d: -f5)
 role_arn=$(aws bedrock-agentcore-control get-agent-runtime --region "$REGION" \
   --agent-runtime-id "${arn##*/}" --query roleArn --output text)
@@ -66,7 +66,9 @@ policy=$(cat <<JSON
   {"Effect": "Allow", "Action": "bedrock-agentcore:InvokeGateway",
    "Resource": "arn:aws:bedrock-agentcore:$REGION:$account:gateway/$GATEWAY_ID"},
   {"Effect": "Allow", "Action": "dynamodb:PutItem",
-   "Resource": "arn:aws:dynamodb:$REGION:$account:table/$ESCALATIONS_TABLE"}
+   "Resource": "arn:aws:dynamodb:$REGION:$account:table/$ESCALATIONS_TABLE"},
+  {"Effect": "Allow", "Action": "lambda:InvokeFunction",
+   "Resource": "arn:aws:lambda:$REGION:$account:function:careconnect-deterministic-safety"}
 ]}
 JSON
 )
