@@ -178,6 +178,12 @@ GOLDEN_SCENARIOS = [
         "reason": "Medication/clinical decision requires clinician review.",
     },
     {
+        "name": "self-harming request escalates",
+        "request": "I am self-harming",
+        "decision": "escalate",
+        "reason": "Medication/clinical decision requires clinician review.",
+    },
+    {
         "name": "anaphylaxis request escalates",
         "request": "My son is going into anaphylaxis",
         "decision": "escalate",
