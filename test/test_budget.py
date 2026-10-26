@@ -56,3 +56,22 @@ class StepPriceMeterTest(unittest.TestCase):
 
     def test_default_config_prices_model_calls(self):
         self.assertGreater(load_budgets().step_cost_usd["Verification Agent"], 0)
+
+
+class DefaultPriceTableTest(unittest.TestCase):
+    def test_worst_case_run_trips_the_cap_when_every_agent_runs(self):
+        b = load_budgets()
+        t = BudgetTracker(b, StepPriceMeter(b.step_cost_usd))
+        with self.assertRaises(BudgetExceeded):
+            for name in b.step_cost_usd:
+                t.step(name)
+        self.assertLessEqual(t.steps, b.max_steps)
+        self.assertGreater(t.cost_meter.total, b.max_cost_usd)
+
+    def test_one_agent_answer_stays_well_under_the_cap(self):
+        b = load_budgets()
+        meter = StepPriceMeter(b.step_cost_usd)
+        for name in ("Safety gate (input check)", "Create execution plan", "Retrieval Agent",
+                     "Combine safe results", "Verification Agent"):
+            meter.charge(name)
+        self.assertLess(meter.total, b.max_cost_usd / 2)

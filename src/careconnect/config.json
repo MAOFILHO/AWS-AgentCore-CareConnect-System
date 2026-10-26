@@ -4,10 +4,10 @@
   "max_cost_usd": 0.05,
   "step_cost_usd": {
     "Safety gate (input check)": 0.0,
-    "Create execution plan": 0.0,
+    "Create execution plan": 0.004,
     "Retrieval Agent": 0.005,
-    "Task/Tool Agent (AgentCore Gateway / MCP)": 0.02,
-    "Escalation Agent": 0.0,
+    "Task/Tool Agent (AgentCore Gateway / MCP)": 0.022,
+    "Escalation Agent": 0.012,
     "Combine safe results": 0.0,
     "Verification Agent": 0.01
   }
