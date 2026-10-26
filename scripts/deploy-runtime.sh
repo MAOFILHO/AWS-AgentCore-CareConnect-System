@@ -38,9 +38,11 @@ out=$(agentcore deploy --agent "$AGENT" --auto-update-on-conflict \
   --env "CARECONNECT_STATE_MACHINE_ARN=$CARECONNECT_STATE_MACHINE_ARN")
 echo "$out" >&2
 
-arn=$(grep -Eo 'arn:aws:bedrock-agentcore:[^ ]+:runtime/[A-Za-z0-9_-]+' <<<"$out" | head -n1 || true)
-if [ -z "$arn" ]; then
-  echo "ERROR: no runtime ARN in agentcore deploy output" >&2
+# The deploy output wraps the ARN across lines, so ask the service for it.
+arn=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
+  --query "agentRuntimes[?agentRuntimeName=='$AGENT'].agentRuntimeArn | [0]" --output text 2>/dev/null || true)
+if [ -z "$arn" ] || [ "$arn" = "None" ]; then
+  echo "ERROR: no runtime named $AGENT in list-agent-runtimes" >&2
   exit 1
 fi
 # agentcore deploy has no tag option; tag the runtime it created.

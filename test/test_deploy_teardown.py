@@ -24,6 +24,10 @@ if [ "$1 $2" = "s3 sync" ]; then
   mkdir -p "$FAKE_SYNCED/$(basename "$3")"; cp -R "$3/." "$FAKE_SYNCED/$(basename "$3")/"
   exit 0
 fi
+if [ "$1 $2" = "bedrock-agentcore-control list-agent-runtimes" ]; then
+  echo "$FAKE_ARN"
+  exit 0
+fi
 stack=""; query=""
 while [ $# -gt 0 ]; do
   case "$1" in
