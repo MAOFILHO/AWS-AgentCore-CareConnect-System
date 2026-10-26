@@ -21,16 +21,35 @@ def _stems(text):
     return {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower())} - STOPWORDS
 
 
+def _split_section(section):
+    """(heading, body) of one "#"-led section; a flattened heading ends where its first sentence starts."""
+    section = section.strip()
+    if not section.startswith("#"):
+        return "", section
+    section = section.lstrip("#").strip()
+    first_line, newline, rest = section.partition("\n")
+    if newline:
+        return first_line.strip(), rest
+    words = list(re.finditer(r"\S+", section))
+    for i in range(1, len(words) - 1):
+        word = words[i].group()
+        follows_question = words[i - 1].group().endswith("?")
+        starts_sentence = follows_question or re.match(r"[a-z0-9]", words[i + 1].group())
+        if word[0].isupper() and not word.endswith(",") and starts_sentence:
+            first = re.match(r"[^.!?]*[.!](?=\s|$)", section[words[i].start():])
+            if first and len(first.group().split()) >= 4:
+                return section[: words[i].start()].strip(), section[words[i].start():]
+    return section, ""
+
+
 def _sentences(text):
     """(heading, sentence) pairs in document order; each sentence is verbatim from the text."""
-    heading = ""
-    for line in text.splitlines():
-        line = line.strip()
-        if line.startswith("#"):
-            heading = line.lstrip("#").strip()
-        elif line:
-            for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", line):
-                yield heading, sentence
+    for section in re.split(r"(?<!\S)(?=#{1,6} )", text):
+        heading, body = _split_section(section)
+        for line in body.splitlines():
+            for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", line.strip()):
+                if sentence:
+                    yield heading, sentence
 
 
 def answer_sentences(request, text):

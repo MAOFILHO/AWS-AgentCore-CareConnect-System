@@ -1,11 +1,15 @@
 import unittest
 from pathlib import Path
 
-from careconnect.narrowing import MAX_SENTENCES, answer_sentences
+from careconnect.narrowing import MAX_SENTENCES, _sentences, answer_sentences
 
 APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"
 FACILITIES = (APPROVED / "facilities-parking-wayfinding.md").read_text()
 VISITING = (APPROVED / "visiting-hours-and-policy.md").read_text()
+
+
+def flatten(text):
+    return " ".join(text.split())
 
 
 class AnswerSentencesTest(unittest.TestCase):
@@ -36,3 +40,21 @@ class AnswerSentencesTest(unittest.TestCase):
     def test_care_does_not_match_car(self):
         text = "Park in the car park. Child care is on level 2."
         self.assertEqual(answer_sentences("Where is child care", text), ["Child care is on level 2."])
+
+    def test_flattened_parking_passage_keeps_the_parking_sentences_only(self):
+        out = "\n".join(answer_sentences("Where can I park?", flatten(FACILITIES)))
+        self.assertIn("multi-storey car park", out)
+        self.assertNotIn("prayer", out)
+
+    def test_flattened_visiting_passage_keeps_the_birth_partner_sentence(self):
+        out = "\n".join(answer_sentences("What time can my husband visit me in maternity?", flatten(VISITING)))
+        self.assertIn("birth partner", out)
+        self.assertNotIn("ICU", out)
+
+    def test_every_flattened_approved_document_still_yields_verbatim_sentences(self):
+        for path in sorted(APPROVED.glob("*.md")):
+            flat = flatten(path.read_text())
+            sentences = [sentence for _, sentence in _sentences(flat)]
+            self.assertTrue(sentences, path.name)
+            for sentence in sentences:
+                self.assertIn(sentence, flat, path.name)
