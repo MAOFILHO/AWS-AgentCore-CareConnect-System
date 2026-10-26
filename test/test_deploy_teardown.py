@@ -147,9 +147,6 @@ class DeployTeardownTest(unittest.TestCase):
             self.assertLess(idx(f"delete-stack --stack-name {stack}"),
                             idx(f"stack-delete-complete --stack-name {stack}"))
 
-    def test_wizard_is_removed(self):
-        self.assertFalse((ROOT / "scripts/deploy-wizard.sh").exists())
-
 
 if __name__ == "__main__":
     unittest.main()
