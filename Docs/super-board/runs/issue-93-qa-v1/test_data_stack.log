@@ -1,0 +1,16 @@
+test_bucket_is_private (test_data_stack.DataStackTemplateTest.test_bucket_is_private) ... ok
+test_every_taggable_resource_has_project_and_issue_tags (test_data_stack.DataStackTemplateTest.test_every_taggable_resource_has_project_and_issue_tags) ... ok
+test_no_account_ids_or_literal_arns (test_data_stack.DataStackTemplateTest.test_no_account_ids_or_literal_arns) ... ok
+test_no_forbidden_resource_types (test_data_stack.DataStackTemplateTest.test_no_forbidden_resource_types) ... ok
+test_outputs (test_data_stack.DataStackTemplateTest.test_outputs) ... ok
+test_outputs_reference_their_resources (test_data_stack.DataStackTemplateTest.test_outputs_reference_their_resources) ... ok
+test_state_machine_name_and_valid_definition (test_data_stack.DataStackTemplateTest.test_state_machine_name_and_valid_definition) ... ok
+test_table_key_billing_and_ttl (test_data_stack.DataStackTemplateTest.test_table_key_billing_and_ttl) ... ok
+test_fails_when_counts_differ (test_data_stack.SyncApprovedDocsTest.test_fails_when_counts_differ) ... ok
+test_passes_when_counts_match (test_data_stack.SyncApprovedDocsTest.test_passes_when_counts_match) ... ok
+test_uploads_approved_folder_to_the_bucket (test_data_stack.SyncApprovedDocsTest.test_uploads_approved_folder_to_the_bucket) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.777s
+
+OK
