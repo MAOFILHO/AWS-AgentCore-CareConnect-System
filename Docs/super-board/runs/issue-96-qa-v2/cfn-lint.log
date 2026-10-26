@@ -1,0 +1,1 @@
+cfn-lint cfn-lint 1.47.1 --regions us-east-1 exit=0 (no findings)
