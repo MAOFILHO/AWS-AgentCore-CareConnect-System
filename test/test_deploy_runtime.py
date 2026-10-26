@@ -45,7 +45,7 @@ case "$stack/$key" in
   bedrock/GuardrailVersion) echo "1" ;;
   data/ApprovalWorkflowArn) echo "arn:aws:states:us-east-1:000000000000:stateMachine:wf" ;;
   gateway/GatewayUrl) echo "$FAKE_GATEWAY_URL" ;;
-  gateway/GatewayId) echo "gw-123" ;;
+  gateway/GatewayId) echo "$FAKE_GATEWAY_ID" ;;
   *) echo "None" ;;
 esac
 """
@@ -63,7 +63,7 @@ echo "| ${FAKE_ARN:60} |"
 
 
 class DeployRuntimeTest(unittest.TestCase):
-    def run_script(self, gateway_url="https://gw.example/mcp", arn=ARN):
+    def run_script(self, gateway_url="https://gw.example/mcp", arn=ARN, gateway_id="gw-123"):
         with tempfile.TemporaryDirectory() as tmp:
             bindir = Path(tmp) / "bin"
             bindir.mkdir()
@@ -77,6 +77,7 @@ class DeployRuntimeTest(unittest.TestCase):
                 "PATH": f"{bindir}:{os.environ['PATH']}",
                 "FAKE_LOG": str(log),
                 "FAKE_GATEWAY_URL": gateway_url,
+                "FAKE_GATEWAY_ID": gateway_id,
                 "FAKE_ARN": arn,
                 "FAKE_POLICY": str(policy),
             }
@@ -128,6 +129,12 @@ class DeployRuntimeTest(unittest.TestCase):
     def test_no_listed_runtime_grants_nothing(self):
         proc, log = self.run_script(arn="None")
         self.assertNotEqual(proc.returncode, 0)
+        self.assertNotIn("put-role-policy", log)
+
+    def test_missing_gateway_id_fails_and_grants_nothing(self):
+        proc, log = self.run_script(gateway_id="None")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("GATEWAY_ID", proc.stderr)
         self.assertNotIn("put-role-policy", log)
 
     def test_empty_value_fails_and_does_not_deploy(self):
