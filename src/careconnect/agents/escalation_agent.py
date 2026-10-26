@@ -25,6 +25,7 @@ import uuid
 import json
 import os
 from datetime import datetime, timezone
+from typing import Protocol, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # AWS clients. UPDATE region_name if you did not build in us-east-1.
@@ -44,51 +45,60 @@ def get_state_machine_arn():
 
 
 # ---------------------------------------------------------------------------
-# Save an escalation ticket to DynamoDB. Returns the new ticket's ID.
-# 'expires_at' is 30 days out (2592000 seconds) so tickets auto-clean via TTL.
+# The two AWS calls this agent makes, as small interfaces. The boto3 adapters
+# below are the defaults; tests use the fakes in careconnect.fakes.
 # ---------------------------------------------------------------------------
-def create_escalation_ticket(reason, category, request_details):
-    ticket_id = str(uuid.uuid4())
-    item = {
-        "ticket_id": ticket_id,
+@runtime_checkable
+class TicketStore(Protocol):
+    def create(self, ticket: dict) -> dict: ...
+
+
+@runtime_checkable
+class ApprovalWorkflow(Protocol):
+    def start(self, ticket: dict) -> str: ...
+
+
+class DynamoTicketStore:
+    def create(self, ticket):
+        import boto3
+
+        boto3.resource("dynamodb", region_name=REGION).Table(TABLE_NAME).put_item(Item=ticket)
+        return ticket
+
+
+class StepFunctionsWorkflow:
+    def start(self, ticket):
+        import boto3
+
+        response = boto3.client("stepfunctions", region_name=REGION).start_execution(
+            stateMachineArn=get_state_machine_arn(),
+            input=json.dumps({"ticket_id": ticket["ticket_id"]}),
+        )
+        return response["executionArn"]
+
+
+# ---------------------------------------------------------------------------
+# The full escalation: save a ticket ('expires_at' is 30 days out, 2592000
+# seconds, so tickets auto-clean via TTL), then start the approval workflow.
+# Returns a patient-facing message plus the ticket ID and workflow execution.
+# ---------------------------------------------------------------------------
+def escalate(reason, category, request_details, store: TicketStore | None = None,
+             workflow: ApprovalWorkflow | None = None):
+    store = store or DynamoTicketStore()
+    workflow = workflow or StepFunctionsWorkflow()
+    ticket = store.create({
+        "ticket_id": str(uuid.uuid4()),
         "category": category,
         "reason": reason,
         "request_details": request_details,
         "status": "pending_review",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": int(datetime.now(timezone.utc).timestamp()) + 2592000,
-    }
-    import boto3
-
-    table = boto3.resource("dynamodb", region_name=REGION).Table(TABLE_NAME)
-    table.put_item(Item=item)
-    return ticket_id
-
-
-# ---------------------------------------------------------------------------
-# Start the Step Functions approval workflow for a given ticket.
-# ---------------------------------------------------------------------------
-def start_approval_workflow(ticket_id):
-    import boto3
-
-    stepfunctions = boto3.client("stepfunctions", region_name=REGION)
-    response = stepfunctions.start_execution(
-        stateMachineArn=get_state_machine_arn(),
-        input=json.dumps({"ticket_id": ticket_id}),
-    )
-    return response["executionArn"]
-
-
-# ---------------------------------------------------------------------------
-# The full escalation: create a ticket, then start the workflow. Returns a
-# patient-facing message plus the ticket ID and workflow execution.
-# ---------------------------------------------------------------------------
-def escalate(reason, category, request_details):
-    ticket_id = create_escalation_ticket(reason, category, request_details)
-    execution = start_approval_workflow(ticket_id)
+    })
+    execution = workflow.start(ticket)
     return {
         "message": "Your request has been escalated to a human reviewer.",
-        "ticket_id": ticket_id,
+        "ticket_id": ticket["ticket_id"],
         "workflow_execution": execution,
         "status": "pending_review",
     }
