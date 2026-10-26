@@ -7,7 +7,7 @@ STOPWORDS = {
     "a", "an", "and", "are", "at", "can", "do", "for", "how", "i", "in", "is", "it", "me", "my",
     "of", "on", "the", "to", "what", "when", "where", "which", "who", "why", "you", "your",
 }
-SUFFIXES = ("ing", "ers", "ors", "er", "or", "es", "ed", "s", "e")
+SUFFIXES = ("ing", "ers", "ors", "er", "or", "es", "ed", "s")
 
 
 def _stem(word):
@@ -48,4 +48,4 @@ def answer_sentences(request, text):
         if matched:
             scored.append((-matched, -len(in_heading), index, sentence))
     best = sorted(scored)[:MAX_SENTENCES]
-    return [sentence for *_, index, sentence in sorted(best, key=lambda s: s[2])]
+    return [s for *_, s in sorted(best, key=lambda s: s[2])]

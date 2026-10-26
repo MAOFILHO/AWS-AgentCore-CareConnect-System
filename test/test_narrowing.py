@@ -32,3 +32,7 @@ class AnswerSentencesTest(unittest.TestCase):
     def test_sentences_stay_in_document_order(self):
         text = "Parking is free. Bring a ticket. Parking bays are marked."
         self.assertEqual(answer_sentences("parking", text), ["Parking is free.", "Parking bays are marked."])
+
+    def test_care_does_not_match_car(self):
+        text = "Park in the car park. Child care is on level 2."
+        self.assertEqual(answer_sentences("Where is child care", text), ["Child care is on level 2."])
