@@ -1,6 +1,12 @@
 """The one entry point the AgentCore runtime calls. All decisions are made by supervisor_flow."""
 
+import sys
+from pathlib import Path
+
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+
+# The runtime runs this file as a script, so put the package root (src/) on the path first.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from careconnect.agents.supervisor_agent import api_result, supervisor_flow
 from careconnect.supervisor import ESCALATION_FAILED_NOTICE

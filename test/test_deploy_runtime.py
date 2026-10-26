@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -118,6 +119,17 @@ class AgentCoreConfigTest(unittest.TestCase):
     def test_runtime_requirements_include_the_sdk(self):
         runtime = (ROOT / "src/requirements.txt").read_text().splitlines()
         self.assertTrue(any(line.startswith("bedrock-agentcore==") for line in runtime))
+        self.assertTrue(any(line.startswith("mcp-proxy-for-aws==") for line in runtime))
+
+    def test_entrypoint_imports_when_run_as_a_script_from_the_source_path(self):
+        # The runtime runs the entrypoint as a script, so sys.path[0] is its own folder, not source_path.
+        agent = yaml.safe_load((ROOT / ".bedrock_agentcore.yaml").read_text())["agents"]["careconnectsupervisor"]
+        source = ROOT / agent["source_path"]
+        script = (ROOT / agent["entrypoint"]).relative_to(source)
+        code = f"import runpy, sys; sys.path[0] = {str(script.parent)!r}; runpy.run_path({str(script)!r})"
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        proc = subprocess.run([sys.executable, "-c", code], cwd=source, env=env, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 if __name__ == "__main__":

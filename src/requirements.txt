@@ -2,3 +2,4 @@ pydantic==2.14.1
 boto3==1.43.118
 bedrock-agentcore==1.25.0
 strands-agents==1.62.0
+mcp-proxy-for-aws==1.7.0
