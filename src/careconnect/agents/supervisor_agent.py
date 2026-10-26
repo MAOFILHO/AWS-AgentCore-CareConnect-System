@@ -100,8 +100,6 @@ def create_plan(request, safety, state):
         plan.append({"task": "Check operational status", "agent": "task"})
     if not plan:
         plan.append({"task": "General approved-information lookup", "agent": "retrieval"})
-    for p in plan:
-        print(f"     - {p['task']} -> {p['agent']} agent")
     return plan
 
 
@@ -289,9 +287,10 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
     except Exception:  # fail closed: never show the draft; no message text or error text in logs
         clinical = bool(outcome.get("safety", {}).get("clinical_detected"))
-        result = "escalation_failed" if clinical else "flow_failed"
-        log.error("request_id=%s safety_gate=%s outcome=%s", request_id,
-                  "escalate" if clinical else "allow", result)
+        if clinical:
+            log.error("request_id=%s safety_gate=escalate outcome=escalation_failed", request_id)
+        else:
+            log.error("request_id=%s safety_gate=allow outcome=flow_failed", request_id)
         notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
         return {**outcome, "decision": "escalate", "draft_response": notice}
     citations = approved_sources(evidence)
