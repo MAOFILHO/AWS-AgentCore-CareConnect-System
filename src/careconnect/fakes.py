@@ -35,6 +35,7 @@ class FakeApprovalWorkflow:
         if self.error:
             raise RuntimeError("workflow unavailable")
         self.started.append(ticket)
+        return "fake-execution"
 
 
 class FakeGrounding:
