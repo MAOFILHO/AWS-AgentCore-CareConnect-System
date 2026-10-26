@@ -92,7 +92,7 @@ has been staged and still requires human approval.
 # ---------------------------------------------------------------------------
 # Main loop: open the Gateway connection, load tools, and chat in the terminal.
 # ---------------------------------------------------------------------------
-def main():
+if __name__ == "__main__":
     print("\nCareConnect Task and Tool Agent")
     print("Type 'exit' to stop.\n")
 
@@ -119,6 +119,3 @@ def main():
             print(response)
             print()
 
-
-if __name__ == "__main__":
-    main()
