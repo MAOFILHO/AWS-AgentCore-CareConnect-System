@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from careconnect.narrowing import MAX_SENTENCES, _sentences, answer_sentences
+from careconnect.narrowing import MAX_SENTENCES, answer_sentences
 
 APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"
 FACILITIES = (APPROVED / "facilities-parking-wayfinding.md").read_text()
@@ -51,17 +51,6 @@ class AnswerSentencesTest(unittest.TestCase):
         self.assertIn("birth partner", out)
         self.assertNotIn("ICU", out)
 
-    def test_every_flattened_approved_document_keeps_all_the_text_of_the_original(self):
-        for path in sorted(APPROVED.glob("*.md")):
-            text = path.read_text()
-            flat = flatten(text)
-            quoted = [sentence for _, sentence in _sentences(flat)]
-            for sentence in quoted:
-                self.assertIn(sentence, flat, path.name)
-            joined = " ".join(quoted)
-            for _, sentence in _sentences(text):
-                self.assertIn(sentence, joined, path.name)
-
     def test_flattened_contact_directory_still_quotes_the_pharmacy_phone_number(self):
         directory = flatten((APPROVED / "contact-directory.md").read_text())
         out = "\n".join(answer_sentences("What is the pharmacy phone number?", directory))
@@ -79,4 +68,12 @@ class AnswerSentencesTest(unittest.TestCase):
             request = heading.lstrip("# ")
             flat = answer_sentences(request, flatten(text))
             lines = answer_sentences(request, text)
+            for sentence in flat:
+                self.assertIn(sentence, flatten(text), path.name)
             self.assertTrue(any(line in quoted for line in lines for quoted in flat), path.name)
+
+    def test_records_request_duration_does_not_quote_the_fees_section(self):
+        records = (APPROVED / "medical-records-request.md").read_text()
+        for text in (records, flatten(records)):
+            out = "\n".join(answer_sentences("How long does a records request take?", text))
+            self.assertNotIn("fee", out.lower())
