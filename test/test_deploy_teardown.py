@@ -46,6 +46,7 @@ key=$(echo "$query" | sed -E "s/.*OutputKey=='([A-Za-z]+)'.*/\1/")
 case "$stack/$key" in
   careconnect-data/ApprovedDocsBucketName) echo "docs-bucket" ;;
   careconnect-data/ApprovalWorkflowArn) echo "arn:aws:states:us-east-1:000000000000:stateMachine:wf" ;;
+  careconnect-data/EscalationsTableName) echo "careconnect-escalations" ;;
   careconnect-bedrock/KnowledgeBaseId) echo "KB12345678" ;;
   careconnect-bedrock/DataSourceId) echo "DS12345678" ;;
   careconnect-bedrock/GuardrailId) echo "gr-id" ;;

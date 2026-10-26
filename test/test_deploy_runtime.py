@@ -14,6 +14,7 @@ ARN = "arn:aws:bedrock-agentcore:us-east-1:000000000000:runtime/careconnect_supe
 KB_ARN = "arn:aws:bedrock:us-east-1:000000000000:knowledge-base/KB12345678"
 WORKFLOW_ARN = "arn:aws:states:us-east-1:000000000000:stateMachine:wf"
 GATEWAY_ARN = "arn:aws:bedrock-agentcore:us-east-1:000000000000:gateway/gw-123"
+TABLE_ARN = "arn:aws:dynamodb:us-east-1:000000000000:table/careconnect-escalations"
 
 # Fake aws: answers describe-stacks by stack name and output key; "empty" simulates a missing output.
 FAKE_AWS = r"""#!/usr/bin/env bash
@@ -43,6 +44,7 @@ case "$stack/$key" in
   bedrock/KnowledgeBaseId) echo "KB12345678" ;;
   bedrock/GuardrailId) echo "gr-id" ;;
   bedrock/GuardrailVersion) echo "1" ;;
+  data/EscalationsTableName) echo "careconnect-escalations" ;;
   data/ApprovalWorkflowArn) echo "arn:aws:states:us-east-1:000000000000:stateMachine:wf" ;;
   gateway/GatewayUrl) echo "$FAKE_GATEWAY_URL" ;;
   gateway/GatewayId) echo "$FAKE_GATEWAY_ID" ;;
@@ -106,7 +108,7 @@ class DeployRuntimeTest(unittest.TestCase):
         self.assertIn(f"tag-resource --resource-arn {ARN} --region us-east-1 "
                       "--tags Project=careconnect,issue=152", log)
 
-    def test_grants_the_runtime_role_retrieve_start_execution_and_invoke_gateway(self):
+    def test_grants_the_runtime_role_retrieve_start_execution_invoke_gateway_and_put_escalation_tickets(self):
         proc, log = self.run_script()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("--agent-runtime-id careconnect_supervisor-abc123", log)
@@ -118,6 +120,7 @@ class DeployRuntimeTest(unittest.TestCase):
             "bedrock:Retrieve": KB_ARN,
             "states:StartExecution": WORKFLOW_ARN,
             "bedrock-agentcore:InvokeGateway": GATEWAY_ARN,
+            "dynamodb:PutItem": TABLE_ARN,
         })
 
     def test_policy_has_no_wildcard_resource(self):
