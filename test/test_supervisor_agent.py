@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -21,8 +22,7 @@ class DeployableSupervisorTest(unittest.TestCase):
         with mock.patch.object(supervisor_agent, "verify", verify), \
                 mock.patch.object(supervisor_agent, "escalate", escalate), \
                 mock.patch.dict(sys.modules, {"careconnect.agents.retrieval_agent": retrieval}), \
-                mock.patch.dict("os.environ", env), \
-                mock.patch("builtins.open", mock.mock_open(read_data="")):
+                mock.patch.dict("os.environ", env):
             out = supervisor_agent.supervisor_flow(
                 text, cost_meter=None if default_meter else meter or FakeCostMeter(), budgets=budgets
             )
@@ -31,6 +31,29 @@ class DeployableSupervisorTest(unittest.TestCase):
 
     def api(self, text, **kw):
         return supervisor_agent.api_result(self.flow(text, **kw))
+
+    def test_flow_allows_with_a_read_only_working_directory(self):
+        before = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            os.chmod(tmp, 0o555)
+            try:
+                out = self.api("visiting hours")
+            finally:
+                os.chdir(before)
+                os.chmod(tmp, 0o755)
+        self.assertEqual(out["decision"], "allow")
+        self.assertEqual(out["citations"], ["s3://docs/approved/visiting.md"])
+
+    def test_consecutive_flows_verify_their_own_evidence(self):
+        other = "Parking is free.\nSource:\ns3://docs/approved/parking.md"
+        self.flow("visiting hours")
+        first = self.verify.call_args.args[1]
+        self.flow("parking", passages=other)
+        second = self.verify.call_args.args[1]
+        self.assertIn("11:00", first)
+        self.assertIn("Parking is free", second)
+        self.assertNotIn("11:00", second)
 
     def test_api_allow_has_only_reply_fields(self):
         out = self.api("visiting hours")
@@ -180,8 +203,7 @@ class DeployableSupervisorTest(unittest.TestCase):
         with mock.patch.object(supervisor_agent, "verify", verify), \
                 mock.patch.object(supervisor_agent, "escalate", side_effect=RuntimeError("x")), \
                 mock.patch.dict(sys.modules, {"careconnect.agents.retrieval_agent": retrieval}), \
-                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
-                mock.patch("builtins.open", mock.mock_open(read_data="")):
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
             out = supervisor_agent.supervisor_flow("visiting hours", cost_meter=FakeCostMeter())
         self.assertEqual(out["draft_response"], supervisor_agent.ESCALATION_FAILED_NOTICE)
 

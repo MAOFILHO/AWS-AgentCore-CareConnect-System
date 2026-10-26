@@ -16,10 +16,9 @@ HOW TO USE
   1. Set your Guardrail ID and version:
          export CARECONNECT_GUARDRAIL_ID="<YOUR_GUARDRAIL_ID>"          # <-- UPDATE THIS
          export CARECONNECT_GUARDRAIL_VERSION="<YOUR_GUARDRAIL_VERSION>" # <-- UPDATE THIS
-  2. Put the drafted answer in draft_answer.txt and the evidence in
-     retrieved_passages.txt.
-  3. Run it:
-         PYTHONPATH=src python3 -m careconnect.agents.verification_agent
+  2. Put the drafted answer and the evidence in two files.
+  3. Run it with their paths:
+         PYTHONPATH=src python3 -m careconnect.agents.verification_agent DRAFT_FILE EVIDENCE_FILE
 
 WHERE YOU MIGHT NEED TO CHANGE THINGS
   - CARECONNECT_GUARDRAIL_ID / _VERSION: must be YOUR guardrail values.
@@ -31,6 +30,7 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 import json
 import os
 import re
+import sys
 from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
@@ -259,12 +259,13 @@ def verify(answer, evidence, safety: SafetyLambda | None = None, guardrail: Guar
 
 
 # ---------------------------------------------------------------------------
-# Read the draft answer and the evidence from files, then verify.
+# Read the draft answer and the evidence from the two files named on the command line, then verify.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    with open("draft_answer.txt", "r", encoding="utf-8") as file:
+    draft_path, evidence_path = sys.argv[1:3]
+    with open(draft_path, "r", encoding="utf-8") as file:
         answer = file.read()
-    with open("retrieved_passages.txt", "r", encoding="utf-8") as file:
+    with open(evidence_path, "r", encoding="utf-8") as file:
         evidence = file.read()
 
     result = verify(answer, evidence)

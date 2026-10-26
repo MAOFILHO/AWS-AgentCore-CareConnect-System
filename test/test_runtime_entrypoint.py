@@ -24,8 +24,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
                 mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
                 mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
                 mock.patch.dict(sys.modules, {"careconnect.agents.retrieval_agent": retrieval}), \
-                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
-                mock.patch("builtins.open", mock.mock_open(read_data="")):
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
             out = runtime_entrypoint.invoke({"prompt": text})
         self.assertEqual(set(out), KEYS)
         ApiReply.model_validate(out)
