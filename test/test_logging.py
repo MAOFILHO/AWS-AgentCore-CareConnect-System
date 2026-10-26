@@ -69,12 +69,18 @@ def _allowed(arg):
     return isinstance(arg, ast.Constant) or (isinstance(arg, ast.Name) and arg.id in ALLOWED_NAMES)
 
 
+def _get_logger(node):
+    return isinstance(node, ast.Call) and ast.unparse(node.func) in {"logging.getLogger", "getLogger"}
+
+
 def log_violations(source):
     """Lines of print calls and of log calls that could carry patient text.
 
     Code under a top-level `if __name__ == "__main__":` is the developer's terminal chat, not a log.
     """
     tree = ast.parse(source)
+    loggers = LOGGERS | {ast.unparse(t) for n in ast.walk(tree)
+                         if isinstance(n, ast.Assign) and _get_logger(n.value) for t in n.targets}
     terminal = {id(n) for top in tree.body if isinstance(top, ast.If)
                 and ast.unparse(top.test) == "__name__ == '__main__'" for n in ast.walk(top)}
     lines = []
@@ -85,7 +91,7 @@ def log_violations(source):
         if isinstance(func, ast.Name) and func.id == "print":
             lines.append(node.lineno)
         elif (isinstance(func, ast.Attribute) and func.attr in LOG_METHODS
-              and isinstance(func.value, ast.Name) and func.value.id in LOGGERS
+              and (ast.unparse(func.value) in loggers or _get_logger(func.value))
               and (func.attr == "exception" or node.keywords or not all(map(_allowed, node.args)))):
             lines.append(node.lineno)
     return lines
@@ -99,10 +105,17 @@ class LogContentRuleTest(unittest.TestCase):
             'log.error("request_id=%s", request_id, exc_info=True)',
             'log.exception("request_id=%s", request_id)',
             'print(message)',
+            'logging.getLogger(__name__).info(message)',
         ]
         for line in seeded:
             with self.subTest(line):
                 self.assertEqual(log_violations(line), [1])
+
+    def test_flags_a_logger_bound_under_another_name(self):
+        for target in ("LOG", "self.log"):
+            with self.subTest(target):
+                source = f"{target} = logging.getLogger(__name__)\n{target}.info(message)\n"
+                self.assertEqual(log_violations(source), [2])
 
     def test_allows_ids_decisions_outcomes_and_the_terminal_chat(self):
         source = (
