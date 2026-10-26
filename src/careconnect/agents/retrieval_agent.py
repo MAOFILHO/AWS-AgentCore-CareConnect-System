@@ -22,6 +22,7 @@ WHERE YOU MIGHT NEED TO CHANGE THINGS
 
 import os
 import re
+from typing import Protocol, runtime_checkable
 
 from strands import tool
 
@@ -56,6 +57,30 @@ def get_kb_client():
 
 
 # ---------------------------------------------------------------------------
+# The one AWS call this agent makes, as a small interface. The Bedrock adapter
+# is the default; tests use FakeKnowledgeBase from careconnect.fakes.
+# search returns Bedrock-shaped retrieval results.
+# ---------------------------------------------------------------------------
+@runtime_checkable
+class KnowledgeBase(Protocol):
+    def search(self, query: str) -> list[dict]: ...
+
+
+class BedrockKnowledgeBase:
+    def search(self, query):
+        # Call the Bedrock Knowledge Base "retrieve" operation. It takes the KB ID
+        # and the query text, and returns the most relevant approved passages.
+        response = get_kb_client().retrieve(
+            knowledgeBaseId=get_kb_id(),
+            retrievalQuery={"text": query},
+            retrievalConfiguration={
+                "vectorSearchConfiguration": {"numberOfResults": 5}
+            },
+        )
+        return response.get("retrievalResults", [])
+
+
+# ---------------------------------------------------------------------------
 # The one tool this agent is allowed to use: search the approved documents.
 # The @tool decorator makes this Python function available to the Strands agent.
 # ---------------------------------------------------------------------------
@@ -67,18 +92,11 @@ def search_docs(query: str) -> str:
     Args:
         query: The question to search for in the CareConnect Knowledge Base.
     """
-    # Call the Bedrock Knowledge Base "retrieve" operation. It takes the KB ID
-    # and the query text, and returns the most relevant approved passages.
-    kb_id = get_kb_id()
-    response = get_kb_client().retrieve(
-        knowledgeBaseId=kb_id,
-        retrievalQuery={"text": query},
-        retrievalConfiguration={
-            "vectorSearchConfiguration": {"numberOfResults": 5}
-        },
-    )
+    return retrieve_passages(query)
 
-    results = response.get("retrievalResults", [])
+
+def retrieve_passages(query: str, kb: KnowledgeBase | None = None) -> str:
+    results = (kb or BedrockKnowledgeBase()).search(query)
 
     # If the approved documents contain nothing relevant, say so clearly.
     if not results:
