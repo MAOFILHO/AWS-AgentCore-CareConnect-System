@@ -40,11 +40,14 @@ URGENT_PATTERNS = [
     r"\bheart attack\b",
     r"\bstroke\b",
     r"\boverdos(e|ed|ing)\b",
+    r"\btoo many pills\b",
     r"\bsuicid(e|al)\b",
+    r"\bkill (myself|himself|herself|themselves)\b",
     r"\bself[- ]?harm\b",
     r"\banaphyla(xis|ctic)\b",
     r"\bseizures?\b",
     r"\btrouble breathing\b",
+    r"\bdifficulty breathing\b",
 ]
 
 # Health or symptom wording. Any request that contains it is escalated before
