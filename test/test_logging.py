@@ -62,7 +62,7 @@ class OutcomeLogTest(unittest.TestCase):
 SRC = Path(__file__).resolve().parent.parent / "src" / "careconnect"
 LOGGERS = {"log", "logger", "logging"}
 LOG_METHODS = {"debug", "info", "warning", "warn", "error", "exception", "critical", "log"}
-ALLOWED_NAMES = {"request_id", "decision", "outcome"}
+ALLOWED_NAMES = {"request_id", "decision", "outcome", "error_type"}
 
 
 def _allowed(arg):
@@ -120,6 +120,7 @@ class LogContentRuleTest(unittest.TestCase):
     def test_allows_ids_decisions_outcomes_and_the_terminal_chat(self):
         source = (
             'log.info("request_id=%s safety_gate=%s outcome=%s", request_id, decision, outcome)\n'
+            'log.error("request_id=%s outcome=%s error_type=%s", request_id, outcome, error_type)\n'
             'if __name__ == "__main__":\n'
             '    print(response)\n'
         )
