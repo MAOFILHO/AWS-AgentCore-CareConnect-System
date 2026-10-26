@@ -47,6 +47,12 @@ class BedrockStackTemplateTest(unittest.TestCase):
         ident = v["Properties"]["GuardrailIdentifier"]
         self.assertEqual(self.resources[ident["Fn::GetAtt"][0]]["Type"], "AWS::Bedrock::Guardrail")
 
+    def test_guardrail_version_description_carries_the_guardrail_hash(self):
+        # Description changes force a new version (update requires replacement).
+        (v,) = self.of_type("AWS::Bedrock::GuardrailVersion")
+        self.assertEqual(v["Properties"]["Description"], {"Fn::Sub": "Guardrail ${GuardrailHash}"})
+        self.assertEqual(self.template["Parameters"]["GuardrailHash"]["AllowedPattern"], "^[0-9a-f]{12}$")
+
     def test_vector_store_is_s3_vectors_not_opensearch(self):
         (kb,) = self.of_type("AWS::Bedrock::KnowledgeBase")
         storage = kb["Properties"]["StorageConfiguration"]
