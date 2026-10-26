@@ -1,5 +1,5 @@
 # Promotes staging to main (Docs/adr/0002-staging-to-main-promotion.md). Started by hand.
-# Runs the AGENTS.md checks on staging, then opens one staging to main PR. It never pushes; the owner merges.
+# Runs the AGENTS.md checks on staging, then writes the compare URL to the job summary. It never pushes or opens a PR.
 name: promote
 on:
   workflow_dispatch:
@@ -13,9 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { ref: staging, persist-credentials: false }
+      - id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with: { node-version: 22, cache: npm }
       - run: npm ci || npm install
@@ -25,19 +29,20 @@ jobs:
       - run: npm run typecheck --if-present
       - run: npm run lint --if-present
       - run: npm run build --if-present
-  open-pr:
+  handoff:
     needs: checks
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
     steps:
-      - name: Open the staging to main PR
+      - name: Write the compare URL and check summary
         env:
-          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.checks.outputs.sha }}
+          COMPARE_URL: ${{ github.server_url }}/${{ github.repository }}/compare/main...${{ needs.checks.outputs.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          open="$(gh pr list -R "$GITHUB_REPOSITORY" --base main --head staging --state open --json url -q '.[0].url // empty')"
-          if [ -n "$open" ]; then echo "already open: $open"; exit 0; fi
-          gh pr create -R "$GITHUB_REPOSITORY" --base main --head staging --title "Promote staging to main" \
-            --body "Checks passed on staging in $RUN_URL. Before merging: close and reopen this PR to start factory-ci, and run scripts/smoke.sh against the staging deploy (Docs/adr/0002-staging-to-main-promotion.md)."
+          {
+            echo "## Promote staging to main"
+            echo "All AGENTS.md checks passed on staging at \`$SHA\` ($RUN_URL): npm test, unittest, typecheck, lint, build."
+            echo "Compare: $COMPARE_URL"
+            echo "Open the staging to main PR only if staging is still at \`$SHA\`, then run scripts/smoke.sh against the staging deploy before merging."
+          } >> "$GITHUB_STEP_SUMMARY"

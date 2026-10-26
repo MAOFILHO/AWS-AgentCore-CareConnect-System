@@ -25,13 +25,16 @@ test("promote runs every check listed in AGENTS.md", () => {
   for (const cmd of checks) assert.ok(workflow.includes(`- run: ${cmd}\n`), `missing check: ${cmd}`);
 });
 
-test("promote fails closed: no ignored failures, and the PR job waits for the checks", () => {
+test("promote fails closed: no ignored failures, and the handoff job waits for the checks", () => {
   assert.doesNotMatch(workflow, /continue-on-error|\|\| true|always\(\)/);
-  assert.match(workflow, /open-pr:\n(?: {4}.*\n)*? {4}needs: checks\n/);
+  assert.match(workflow, /handoff:\n(?: {4}.*\n)*? {4}needs: checks\n/);
 });
 
-test("promote opens one staging to main PR and never pushes", () => {
-  assert.doesNotMatch(workflow, /git push|contents: write/);
-  assert.equal(workflow.match(/gh pr create/g).length, 1);
-  assert.match(workflow, /gh pr create [^\n]*--base main --head staging/);
+test("promote writes the compare URL for the checked staging commit to the job summary", () => {
+  assert.match(workflow, /COMPARE_URL: [^\n]*\/compare\/main\.\.\.\$\{\{ needs\.checks\.outputs\.sha \}\}\n/);
+  assert.match(workflow, /echo "Compare: \$COMPARE_URL"\n(?:.*\n)*? *\} >> "\$GITHUB_STEP_SUMMARY"\n/);
+});
+
+test("promote never pushes, never opens a PR and needs no write permission", () => {
+  assert.doesNotMatch(workflow, /git push|gh pr create|gh api|: write/);
 });
