@@ -26,6 +26,12 @@ CLINICAL_PATTERNS = [
     r"\bcan i take .* with\b",
     r"\bis .* dangerous\b",
     r"\bhow many pills\b",
+    r"\b(tylenol|paracetamol|acetaminophen|ibuprofen|advil|motrin|aspirin|antibiotics?|insulin|warfarin|amoxicillin)\b",
+    r"\bsafe (for|to give)\b",
+    r"\bcan i give\b",
+    r"\bgive my (child|baby|kid|son|daughter)\b",
+    r"\bpregnan\w*\b.*\b(medic\w*|drugs?|pills?|dose|tablets?)\b",
+    r"\b(medic\w*|drugs?|pills?|dose|tablets?)\b.*\bpregnan\w*",
 ]
 
 # Patterns that indicate an URGENT / emergency situation (must be escalated).
