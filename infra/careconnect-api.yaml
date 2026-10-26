@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CareConnect API and website (issue 97): the careconnect-agentcore-proxy Lambda behind an HTTP API
+  (POST /careconnect) and a private S3 bucket behind CloudFront with Origin Access Control. Zip
+  Docs/Repo/lambda-functions/careconnect-agentcore-proxy/ to s3://<CodeBucket>/careconnect-agentcore-proxy.zip,
+  then: aws cloudformation deploy --stack-name careconnect-api --region us-east-1
+  --template-file infra/careconnect-api.yaml --capabilities CAPABILITY_IAM
+  --parameter-overrides CodeBucket=<bucket> AgentRuntimeArn=<ARN printed by scripts/deploy-runtime.sh>.
+  Empty the frontend bucket before 'aws cloudformation delete-stack'.
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: S3 bucket that holds the proxy code zip
+  ProxyCodeKey:
+    Type: String
+    Default: careconnect-agentcore-proxy.zip
+    Description: S3 key of the zip with lambda_function.py of careconnect-agentcore-proxy
+  AgentRuntimeArn:
+    Type: String
+    Description: ARN of the Supervisor AgentCore runtime (printed by scripts/deploy-runtime.sh)
+  PydanticLayerArn:
+    Type: String
+    Default: ""
+    Description: ARN of a pydantic v2 layer for Python 3.12. Leave empty if the zip bundles pydantic.
+
+Conditions:
+  HasPydanticLayer: !Not [!Equals [!Ref PydanticLayerArn, ""]]
+
+Resources:
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "97" }
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-frontend"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        Origins:
+          - Id: frontend
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: frontend
+          ViewerProtocolPolicy: redirect-to-https
+          # Managed-CachingOptimized
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "97" }
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  ProxyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/careconnect-agentcore-proxy
+      RetentionInDays: 14
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "97" }
+
+  ProxyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-own-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${ProxyLogGroup.Arn}:*"
+        - PolicyName: invoke-agentcore
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # IAM checks both the runtime and the endpoint it routes to.
+              - Effect: Allow
+                Action: bedrock-agentcore:InvokeAgentRuntime
+                Resource:
+                  - !Ref AgentRuntimeArn
+                  - !Sub "${AgentRuntimeArn}/*"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "97" }
+
+  ProxyFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ProxyLogGroup
+    Properties:
+      FunctionName: careconnect-agentcore-proxy
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ProxyRole.Arn
+      Timeout: 300
+      MemorySize: 128
+      Layers: !If [HasPydanticLayer, [!Ref PydanticLayerArn], !Ref "AWS::NoValue"]
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref ProxyCodeKey
+      Environment:
+        Variables:
+          AGENT_RUNTIME_ARN: !Ref AgentRuntimeArn
+          ALLOWED_ORIGIN: !Sub "https://${Distribution.DomainName}"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "97" }
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: careconnect-api
+      ProtocolType: HTTP
+      Tags: { Project: careconnect, issue: "97" }
+
+  ProxyIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ProxyFunction.Arn
+      # 1.0 keeps event["httpMethod"], which the proxy reads for the CORS preflight.
+      PayloadFormatVersion: "1.0"
+
+  PostRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /careconnect
+      Target: !Sub "integrations/${ProxyIntegration}"
+
+  PreflightRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: OPTIONS /careconnect
+      Target: !Sub "integrations/${ProxyIntegration}"
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      Tags: { Project: careconnect, issue: "97" }
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ProxyFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/careconnect"
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/careconnect"
+  CloudFrontDomain:
+    Value: !GetAtt Distribution.DomainName
+  FrontendBucketName:
+    Value: !Ref FrontendBucket
+  DistributionId:
+    Value: !Ref Distribution
