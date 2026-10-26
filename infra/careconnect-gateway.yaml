@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CareConnect AgentCore Gateway (issue 96): an IAM-authorized MCP gateway with the
+  careconnect-mock-hospital-tools Lambda as its only target. Deploy with:
+  aws cloudformation deploy --stack-name careconnect-gateway --region us-east-1
+  --template-file infra/careconnect-gateway.yaml --capabilities CAPABILITY_IAM
+  --parameter-overrides ToolsFunctionArn=<ToolsFunctionArn output of the Lambda stack>.
+  The GatewayUrl output is CARECONNECT_GATEWAY_URL. Delete with 'aws cloudformation delete-stack'.
+
+Parameters:
+  ToolsFunctionArn:
+    Type: String
+    Description: ToolsFunctionArn output of the Lambda stack (careconnect-mock-hospital-tools)
+
+Resources:
+  GatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: bedrock-agentcore.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { "aws:SourceAccount": !Ref "AWS::AccountId" }
+      Policies:
+        - PolicyName: invoke-tools-lambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Ref ToolsFunctionArn
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "96" }
+
+  Gateway:
+    Type: AWS::BedrockAgentCore::Gateway
+    Properties:
+      Name: careconnect-gateway
+      Description: CareConnect synthetic hospital tools
+      AuthorizerType: AWS_IAM
+      ProtocolType: MCP
+      RoleArn: !GetAtt GatewayRole.Arn
+      Tags:
+        Project: careconnect
+        issue: "96"
+
+  ToolsTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    Properties:
+      Name: careconnect-tools
+      GatewayIdentifier: !Ref Gateway
+      CredentialProviderConfigurations:
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+      TargetConfiguration:
+        Mcp:
+          Lambda:
+            LambdaArn: !Ref ToolsFunctionArn
+            ToolSchema:
+              InlinePayload:
+                - Name: check_appointment_status
+                  Description: Check the status of a synthetic patient appointment.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      patient_reference: { Type: string, Description: Synthetic patient reference }
+                - Name: check_refill_eligibility
+                  Description: Check whether a synthetic prescription can be refilled.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      drug: { Type: string, Description: Medication name }
+                    Required: [drug]
+                - Name: stage_refill_request
+                  Description: Stage a refill request for human approval. It is never submitted.
+                  InputSchema:
+                    Type: object
+                    Properties:
+                      drug: { Type: string, Description: Medication name }
+                      idempotency_key: { Type: string, Description: Key that makes a retry safe }
+                    Required: [drug]
+
+Outputs:
+  GatewayUrl:
+    Value: !GetAtt Gateway.GatewayUrl
