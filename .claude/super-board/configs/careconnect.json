@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "description": "CareConnect build board",
+  "project": { "owner": "MAOFILHO", "title": "AWS-AgentCore-CareConnect-System board", "number": 3 },
+  "worker_backend": "workflow",
+  "model_tier": "medium",
+  "codex": { "model": null },
+  "target": { "type": "repo", "url": null },
+  "repo": { "path": ".", "remote": "https://github.com/MAOFILHO/AWS-AgentCore-CareConnect-System" },
+  "base_branch": "staging",
+  "timezone": "America/Toronto",
+  "columns": ["Backlog", "Ready", "Building", "QA", "Review", "Blocked", "Done"],
+  "labels": ["qa", "bug", "feature"],
+  "paths": { "project_md": null, "pre_flight_md": "docs/super-board/pre-flight.md", "runs_dir": "docs/super-board/runs" },
+  "human_approves_merge": false,
+  "merge_policy": {
+    "default": "auto",
+    "auto_max_lines": 400,
+    "allow_auto_on_production": false
+  },
+  "migrations": { "globs": [], "allowed_envs": ["test", "staging"], "target_env": "staging", "commands": {}, "checks": {}, "human_steps": [] },
+  "no_progress_cycles": 6,
+  "max_dispatches": 0,
+  "truth_gate": "non-trivial",
+  "truth_threshold": 70,
+  "usage_pause_pct": 95,
+  "usage_fallback": "none",
+  "verify_commands": [
+    "(npm ci || npm install) && python3 -m pip install -q -r requirements.txt && npm test && PYTHONPATH=src python3 -m unittest discover -s test"
+  ],
+  "max_workers": 0,
+  "rebuild_cap": 2,
+  "block_rate_alert_pct": 30,
+  "collect": { "sources": ["github", "prs", "architecture"], "window_days": 14 },
+  "notifications": { "channel": "session", "bot_identity": "MAOFILHO" }
+}
