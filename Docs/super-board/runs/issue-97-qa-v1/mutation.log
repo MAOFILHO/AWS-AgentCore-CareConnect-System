@@ -1,0 +1,16 @@
+== mutation: DistributionId output -> Distribution.DomainName
+----------------------------------------------------------------------
+Ran 12 tests in 0.128s
+
+FAILED (failures=1)
+== restored template
+Ran 12 tests in 0.125s
+
+OK
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+ℹ pass 69
+ℹ fail 0
+Ran 177 tests in 3.425s
+OK

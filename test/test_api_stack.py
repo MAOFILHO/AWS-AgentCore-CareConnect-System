@@ -112,6 +112,19 @@ class ApiStackTest(unittest.TestCase):
         self.assertEqual(set(self.template["Outputs"]),
                          {"ApiUrl", "CloudFrontDomain", "FrontendBucketName", "DistributionId"})
 
+    def test_outputs_point_at_the_stack_resources(self):
+        out = {k: v["Value"] for k, v in self.template["Outputs"].items()}
+        self.assertEqual(out["CloudFrontDomain"], {"GetAtt": "Distribution.DomainName"})
+        self.assertEqual(out["FrontendBucketName"], {"Ref": "FrontendBucket"})
+        self.assertEqual(out["DistributionId"], {"Ref": "Distribution"})
+        self.assertEqual(out["ApiUrl"], {"Sub": "https://${HttpApi}.execute-api.${AWS::Region}"
+                                                ".amazonaws.com/careconnect"})
+        for r in self.resources.values():
+            if r["Type"] == "AWS::ApiGatewayV2::Route":
+                self.assertEqual(r["Properties"]["Target"], {"Sub": "integrations/${ProxyIntegration}"})
+        self.assertEqual(self.resources["ProxyIntegration"]["Properties"]["IntegrationUri"],
+                         {"GetAtt": "ProxyFunction.Arn"})
+
     def test_no_account_ids_or_arns_in_template(self):
         self.assertIsNone(re.search(r"\d{12}", self.text))
         self.assertNotIn("arn:aws:bedrock-agentcore", self.text)

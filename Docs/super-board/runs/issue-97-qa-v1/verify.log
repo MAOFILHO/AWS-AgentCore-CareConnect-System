@@ -1,0 +1,183 @@
+
+[notice] A new release of pip is available: 26.2.1 -> 26.2.2
+[notice] To update, run: python3 -m pip install --upgrade pip
+npm notice run AWS-AgentCore-CareConnect-System@0.1.0 test
+npm notice run node --test
+✔ a green, ordinary factory PR merges (1.293084ms)
+✔ it never merges while the kill switch is off (0.150042ms)
+✔ it never merges a non-factory branch (0.067708ms)
+✔ it never merges a draft (0.059959ms)
+✔ it never merges a needs-human PR (0.068542ms)
+✔ it never merges a protected-paths PR (0.055084ms)
+✔ the protected-paths label wins over a file outside the allow list (0.088208ms)
+✔ it never merges while a required check is failing, pending or missing (0.127ms)
+✔ it never merges a PR that touches safety, workflow, dependency or approved-document files (0.417833ms)
+✔ it never merges a PR from a fork, even with a factory branch name (0.104584ms)
+✔ it merges only files on the allow list, so a new unlisted file needs a human (0.255416ms)
+✔ it merges backend Python outside the protected files (0.109791ms)
+✔ it never merges backend Python alongside a protected file (3.164625ms)
+✔ it never merges a PR with more than 100 changed files (0.086417ms)
+✔ isHumanGate is true only for a protected-path blocker that asks for human review (0.164292ms)
+✔ isHumanGate is false when the PR did not change the file (0.052666ms)
+✔ security-prompt.md still tells the reviewer to write the human-gate phrase (0.369792ms)
+(node:55214) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a reply shows its text and citation names (1.276833ms)
+✔ an escalation shows the server's notice and no citations (0.121458ms)
+✔ a block shows the server's reply and no citations (0.097667ms)
+✔ an API error shows one fixed message with no error text (0.167417ms)
+✔ the page never writes the patient's text to console or storage (0.649625ms)
+✔ a failed escalation shows the server's call-us reply, not a promise (0.100292ms)
+✔ a budget stop shows the server's reply (0.086375ms)
+✔ a malformed 200 body shows the error notice (0.292959ms)
+✔ an answer without citations or with bad citations shows only valid names (0.144791ms)
+✔ show() renders the status above the reply text with textContent (0.161458ms)
+✔ each of the 4 decisions gives the right status (0.564334ms)
+✔ a staged reply shows the awaiting-approval status; false or missing shows none (0.180625ms)
+✔ a request that never answers aborts after the timeout and shows the error (3.400208ms)
+✔ the timeout is 35 seconds (0.056583ms)
+✔ a reply in time is unchanged and clears the timer (0.122833ms)
+✔ a second submit while one is pending sends no second request (0.160208ms)
+✔ after a reply or an error the next submit works (0.0935ms)
+✔ the waiting text shows after submit and the reply replaces it (0.103ms)
+✔ the fixed error replaces the waiting text (0.060375ms)
+✔ an empty question shows no waiting text (0.038166ms)
+✔ the placeholder API URL shows the not-connected text and never calls fetch (0.074792ms)
+✔ a real API URL still calls fetch (0.054542ms)
+✔ all green merges (0.70525ms)
+✔ pending check waits (0.093208ms)
+✔ missing check waits (0.06675ms)
+✔ failed review under the cap goes back to build (0.071375ms)
+✔ failed review at the cap stops (0.06925ms)
+✔ needs-human or draft never merges (0.053708ms)
+✔ a PR that changes the factory control files is held, never merged (0.0745ms)
+✔ touchesControl ignores ordinary and safety code (0.05275ms)
+✔ findings comment starts with the drive marker and names the round and the PR (0.129334ms)
+✔ only the factory's own drive comments count as attempts (0.12125ms)
+✔ only factory-review comments from the Actions bot are trusted (0.085792ms)
+✔ any change to a protected test is held, even an added line (0.066583ms)
+✔ a rename counts both paths (0.512292ms)
+✔ a non-required check still running makes the PR wait (0.054375ms)
+✔ approved documents and infra always wait for a human (0.043375ms)
+✔ reviewers must use a different model than the builder (0.288458ms)
+✔ factory-improve gives Claude Read and Edit only, never Write (2.090041ms)
+✔ workflow matches the protected-file and allow-list reasons that auto-merge.js returns (0.478542ms)
+✔ workflow labels only the protected-file and allow-list reasons (0.296042ms)
+✔ index.html sets a mobile viewport (0.690042ms)
+✔ greet returns a greeting (0.424834ms)
+✔ merge.sh merges only the head commit it read (398.192ms)
+✔ merge.sh fails and prints no merged line when GitHub refuses the merge (271.358583ms)
+✔ merge.sh refuses before merging when headRefOid is empty (259.047833ms)
+✔ pass after fail gives empty prior (0.501584ms)
+✔ fail with no later pass gives the findings (0.413333ms)
+✔ ignores other authors and no comments (0.085334ms)
+✔ factory-improve still reads only review round comments (0.225875ms)
+✔ a drive-attempt comment from another author is ignored (0.074292ms)
+✔ the factory's own drive-attempt comment is read (0.063792ms)
+ℹ tests 69
+ℹ suites 0
+ℹ pass 69
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1081.934042
+................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 176 tests in 3.370s
+
+OK
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Check operational status -> task agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+     - Retrieve approved information -> retrieval agent
+verify-exit=0
+
+======================================================================
+ERROR: test_api_stack (unittest.loader._FailedTest.test_api_stack)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_api_stack
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/loader.py", line 141, in loadTestsFromName
+    module = __import__(module_name)
+ModuleNotFoundError: No module named 'test.test_api_stack'
+
+
+======================================================================
+ERROR: test_proxy_lambda (unittest.loader._FailedTest.test_proxy_lambda)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_proxy_lambda
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/loader.py", line 141, in loadTestsFromName
+    module = __import__(module_name)
+ModuleNotFoundError: No module named 'test.test_proxy_lambda'
+
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+FAILED (errors=2)
+npm notice run AWS-AgentCore-CareConnect-System@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run AWS-AgentCore-CareConnect-System@0.1.0 lint
+npm notice run eslint .
+npm notice run AWS-AgentCore-CareConnect-System@0.1.0 build
+npm notice run echo 'no build step yet'
+no build step yet
+npm-checks-exit=0
+
+[notice] A new release of pip is available: 26.2.1 -> 26.2.2
+[notice] To update, run: python3.14 -m pip install --upgrade pip
+cfn-lint-exit=0

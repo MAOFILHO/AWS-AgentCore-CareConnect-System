@@ -1,0 +1,16 @@
+test_allowed_origin_is_the_cloudfront_domain (test_api_stack.ApiStackTest.test_allowed_origin_is_the_cloudfront_domain) ... ok
+test_api_routes_post_and_preflight_to_the_proxy (test_api_stack.ApiStackTest.test_api_routes_post_and_preflight_to_the_proxy) ... ok
+test_bucket_is_private_behind_cloudfront_oac_with_cheapest_price_class (test_api_stack.ApiStackTest.test_bucket_is_private_behind_cloudfront_oac_with_cheapest_price_class) ... ok
+test_description_fits_cloudformation_limit (test_api_stack.ApiStackTest.test_description_fits_cloudformation_limit) ... ok
+test_every_taggable_resource_is_tagged (test_api_stack.ApiStackTest.test_every_taggable_resource_is_tagged) ... ok
+test_invoke_policy_is_scoped_to_the_runtime_arn (test_api_stack.ApiStackTest.test_invoke_policy_is_scoped_to_the_runtime_arn) ... ok
+test_no_account_ids_or_arns_in_template (test_api_stack.ApiStackTest.test_no_account_ids_or_arns_in_template) ... ok
+test_no_forbidden_resource_type (test_api_stack.ApiStackTest.test_no_forbidden_resource_type) ... ok
+test_outputs (test_api_stack.ApiStackTest.test_outputs) ... ok
+test_proxy_lambda_has_300_second_timeout (test_api_stack.ApiStackTest.test_proxy_lambda_has_300_second_timeout) ... ok
+test_proxy_takes_runtime_arn_and_origin_from_environment (test_api_stack.ProxyReadsStackEnvTest.test_proxy_takes_runtime_arn_and_origin_from_environment) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.127s
+
+OK
