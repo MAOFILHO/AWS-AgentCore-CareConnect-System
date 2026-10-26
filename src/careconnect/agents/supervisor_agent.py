@@ -285,12 +285,13 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         verification = verify_response(draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
-    except Exception:  # fail closed: never show the draft; no message text or error text in logs
+    except Exception as exc:  # fail closed: never show the draft; log the class name only, never message or error text
+        error_type = type(exc).__name__
         clinical = bool(outcome.get("safety", {}).get("clinical_detected"))
         if clinical:
-            log.error("request_id=%s safety_gate=escalate outcome=escalation_failed", request_id)
+            log.error("request_id=%s safety_gate=escalate outcome=escalation_failed error_type=%s", request_id, error_type)
         else:
-            log.error("request_id=%s safety_gate=allow outcome=flow_failed", request_id)
+            log.error("request_id=%s safety_gate=allow outcome=flow_failed error_type=%s", request_id, error_type)
         notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
         return {**outcome, "decision": "escalate", "draft_response": notice}
     citations = approved_sources(evidence)
