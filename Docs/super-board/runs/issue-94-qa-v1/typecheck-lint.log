@@ -1,4 +1,0 @@
-npm notice run AWS-AgentCore-CareConnect-System@0.1.0 typecheck
-npm notice run tsc --noEmit -p tsconfig.json
-npm notice run AWS-AgentCore-CareConnect-System@0.1.0 lint
-npm notice run eslint .

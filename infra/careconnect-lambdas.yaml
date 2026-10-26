@@ -1,18 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  CareConnect Lambda stack (issue 94): careconnect-deterministic-safety and
-  careconnect-mock-hospital-tools (Python 3.12) with least-privilege execution roles.
-  No provisioned concurrency. The code is the zip files of Docs/Repo/lambda-functions/,
-  uploaded to the S3 bucket named in CodeBucket.
-  Deploy (from the repo root; each zip holds lambda_function.py at its top level):
-    (cd Docs/Repo/lambda-functions/<function-dir> && zip -r /tmp/<name>.zip .)
-    aws s3 cp /tmp/<name>.zip s3://<bucket>/<name>.zip --region us-east-1   (for both functions)
-    aws cloudformation deploy --stack-name careconnect-lambdas --region us-east-1 \
-      --template-file infra/careconnect-lambdas.yaml --capabilities CAPABILITY_IAM \
-      --parameter-overrides CodeBucket=<bucket>
-  The function names and /aws/lambda/careconnect-* log groups are fixed. Delete any
-  functions and log groups made by the console steps or scripts/deploy-wizard.sh before
-  the first deploy, or the stack fails with AlreadyExists and rolls back.
+  CareConnect Lambdas (issue 94) on Python 3.12 with least-privilege roles, no provisioned
+  concurrency. Zip each Docs/Repo/lambda-functions/<name>/ dir to s3://<CodeBucket>/<name>.zip,
+  then: aws cloudformation deploy --stack-name careconnect-lambdas --region us-east-1
+  --template-file infra/careconnect-lambdas.yaml --capabilities CAPABILITY_IAM
+  --parameter-overrides CodeBucket=<bucket>. Delete console-made functions and log groups first.
 
 Parameters:
   CodeBucket:
