@@ -1,6 +1,25 @@
+import importlib.util
 import unittest
+from pathlib import Path
 
 from careconnect.safety_gate import classify, mask_pii
+
+
+LAMBDA = (
+    Path(__file__).resolve().parent.parent
+    / "Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py"
+)
+spec = importlib.util.spec_from_file_location("safety_lambda", LAMBDA)
+safety_lambda = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(safety_lambda)
+
+DRUG_QUESTIONS = [
+    "Is tylenol safe for kids under 2?",
+    "Can I give my baby paracetamol?",
+    "Is ibuprofen OK for my 5 year old?",
+    "is advil safe while pregnant",
+]
+ROUTINE_QUESTIONS = ["What are the visiting hours?", "Where is the parking?", "How do I book an appointment?"]
 
 
 class SafetyGateTest(unittest.TestCase):
@@ -64,3 +83,22 @@ class SafetyGateTest(unittest.TestCase):
     def test_masks_pii(self):
         text = "a@b.com 123-45-6789 MRN-12345678 555-123-4567"
         self.assertEqual(mask_pii(text), "[EMAIL] [SSN] [MRN] [PHONE]")
+
+
+class LambdaParityTest(unittest.TestCase):
+    def test_both_copies_classify_alike(self):
+        for question in DRUG_QUESTIONS + ROUTINE_QUESTIONS:
+            with self.subTest(question):
+                self.assertEqual(
+                    classify(question)["clinical"], safety_lambda.classify(question)["clinical"]
+                )
+
+    def test_drug_questions_are_clinical_and_routine_ones_are_not(self):
+        for question in DRUG_QUESTIONS:
+            with self.subTest(question):
+                self.assertTrue(classify(question)["clinical"])
+                self.assertTrue(safety_lambda.classify(question)["clinical"])
+        for question in ROUTINE_QUESTIONS:
+            with self.subTest(question):
+                self.assertFalse(classify(question)["clinical"])
+                self.assertFalse(safety_lambda.classify(question)["clinical"])

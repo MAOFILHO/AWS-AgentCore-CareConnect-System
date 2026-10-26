@@ -47,6 +47,12 @@ CLINICAL_PATTERNS = [
     r"\bdouble (my|the) dose\b",
     r"\bchange (my|the) dose\b",
     r"\bhow much .* should i take\b",
+    r"\b(tylenol|paracetamol|acetaminophen|ibuprofen|advil|motrin|aspirin|antibiotics?|insulin|warfarin|amoxicillin)\b",
+    r"\bsafe (for|to give)\b",
+    r"\bcan i give\b",
+    r"\bgive my (child|baby|kid|son|daughter)\b",
+    r"\bpregnan\w*\b.*\b(medic\w*|drugs?|pills?|dose|tablets?)\b",
+    r"\b(medic\w*|drugs?|pills?|dose|tablets?)\b.*\bpregnan\w*",
 ]
 
 # Patterns that indicate an URGENT / emergency situation (must be escalated).
