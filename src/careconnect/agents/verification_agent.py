@@ -36,6 +36,8 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from careconnect.safety_gate import PII_PATTERNS
+
 # ---------------------------------------------------------------------------
 # Configuration. UPDATE REGION if you did not build in us-east-1.
 # ---------------------------------------------------------------------------
@@ -240,6 +242,20 @@ Answer false when the draft is about a different topic than the request.
 
 
 # ---------------------------------------------------------------------------
+# A phone number the patient asked for, printed in the approved evidence, is not leaked
+# personal data. It is the only PII exempted; email, SSN and MRN are always masked.
+# ---------------------------------------------------------------------------
+ASKS_FOR_PHONE = re.compile(r"\b(phone|telephone)\b", re.IGNORECASE)
+
+
+def approved_phones(request, evidence):
+    """The phone numbers of the evidence, when the request asks for a phone number."""
+    if not ASKS_FOR_PHONE.search(request):
+        return set()
+    return set(re.findall(PII_PATTERNS["phone"], evidence))
+
+
+# ---------------------------------------------------------------------------
 # Combine all five checks into a single PASS/FAIL verdict with details.
 # ---------------------------------------------------------------------------
 def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardrail: Guardrail | None = None):
@@ -253,7 +269,10 @@ def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardr
     clinical_detected = classification.get("clinical", False)
     urgent_detected = classification.get("urgent", False)
     injection_detected = classification.get("injection", False)
-    pii_detected = bool(classification.get("pii", {}))
+    pii = dict(classification.get("pii", {}))
+    if set(re.findall(PII_PATTERNS["phone"], answer)) <= approved_phones(request, evidence):
+        pii.pop("phone", None)
+    pii_detected = bool(pii)
     guardrail_passed = guardrail_result["action"] == "NONE"
 
     # PASS only if EVERY condition below is satisfied.
@@ -284,7 +303,7 @@ def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardr
             "clinical": clinical_detected,
             "urgent": urgent_detected,
             "injection": injection_detected,
-            "pii": classification.get("pii", {}),
+            "pii": pii,
         },
         "guardrail": guardrail_result,
     }

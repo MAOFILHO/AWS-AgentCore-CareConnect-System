@@ -37,7 +37,7 @@ import uuid
 from pydantic import ValidationError
 
 from careconnect.agents.escalation_agent import escalate
-from careconnect.agents.verification_agent import get_guardrail_settings, verify
+from careconnect.agents.verification_agent import approved_phones, get_guardrail_settings, verify
 from careconnect.api_reply import ApiReply
 from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, StepPriceMeter, load_budgets,
@@ -270,7 +270,16 @@ def escalation_notice(request):
 # ---------------------------------------------------------------------------
 def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
     out = _supervisor_flow(request, cost_meter=cost_meter, budgets=budgets, clock=clock)
-    return {**out, "draft_response": mask_pii(out["draft_response"])}
+    keep = out.pop("approved_phones", ())
+    return {**out, "draft_response": mask_pii_except(out["draft_response"], keep)}
+
+
+def mask_pii_except(text, keep):
+    """mask_pii, but the phone numbers in keep stay as written."""
+    keep = sorted(keep)
+    for index, number in enumerate(keep):
+        text = text.replace(number, f"\0{index}\0")
+    return re.sub(r"\0(\d+)\0", lambda m: keep[int(m.group(1))], mask_pii(text))
 
 
 def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
@@ -308,7 +317,7 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         return {**outcome, "decision": "escalate", "draft_response": escalation_notice(request),
                 "verification": verification}  # withhold the draft
     return {**outcome, "decision": "allow", "draft_response": draft, "verification": verification,
-            "citations": citations}
+            "citations": citations, "approved_phones": approved_phones(request, evidence)}
 
 
 def staged_reply(request, results, evidence, state):

@@ -5,9 +5,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from careconnect.agents import supervisor_agent
+from careconnect.agents import supervisor_agent, verification_agent
 from careconnect.budget import BUDGET_MESSAGE, Budgets, load_budgets
 from careconnect.fakes import FakeCostMeter
+from careconnect.safety_gate import classify
 from careconnect.supervisor import ESCALATION_NOTICE
 
 APPROVED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/approved"
@@ -105,6 +106,28 @@ class DeployableSupervisorTest(unittest.TestCase):
                 self.assertIn(token, text)
             for leak in ("555-123-4567", "jo@example.com", "123-45-6789", "MRN-12345678"):
                 self.assertNotIn(leak, text)
+
+    def test_flattened_contact_directory_answers_the_billing_phone_question(self):
+        directory = " ".join((APPROVED / "contact-directory.md").read_text().split())
+        passage = directory + "\nSource:\ns3://docs/approved/contact-directory.md"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passage))
+        grounded = mock.Mock(structured_output=mock.Mock(grounded=True, unsupported_claims=[], reason="ok"))
+        relevant = mock.Mock(structured_output=verification_agent.RelevanceResult(relevant=True, reason="r"))
+        with mock.patch.dict(sys.modules, {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
+                mock.patch.object(supervisor_agent, "escalate") as escalate, \
+                mock.patch.object(verification_agent, "run_deterministic_safety",
+                                  side_effect=lambda text, safety=None: {"classification": classify(text)}), \
+                mock.patch.object(verification_agent, "run_guardrail", return_value={"action": "NONE"}), \
+                mock.patch.object(verification_agent, "get_verification_agent",
+                                  return_value=mock.Mock(side_effect=[grounded, relevant])):
+            out = supervisor_agent.api_result(supervisor_agent.supervisor_flow(
+                "What is the phone number for billing?", cost_meter=FakeCostMeter()))
+        escalate.assert_not_called()
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("(555) 010-0160", out["reply"])
+        self.assertNotIn("[PHONE]", out["reply"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
 
     def test_evidence_without_approved_source_escalates(self):
         for passages in ("Visiting hours are 11:00-20:00.", "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/evaluation-untrusted/x.md"):

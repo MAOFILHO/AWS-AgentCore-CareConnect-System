@@ -6,6 +6,7 @@ from unittest import mock
 
 from careconnect.agents import verification_agent as agent
 from careconnect.fakes import FakeGuardrail, FakeSafetyLambda
+from careconnect.safety_gate import classify
 
 
 class VerificationInterfaceTest(unittest.TestCase):
@@ -77,6 +78,38 @@ class RelevanceCheckTest(unittest.TestCase):
                     "visiting hours", draft, draft, FakeSafetyLambda(), FakeGuardrail()
                 )["verification_status"]
         self.assertEqual(verdicts, {True: "PASS", False: "FAIL"})
+
+
+class GateSafety:
+    """The deterministic safety Lambda: the same rules as the Safety gate."""
+
+    def classify(self, text):
+        return {"classification": classify(text)}
+
+
+class PhoneNumberVerificationTest(unittest.TestCase):
+    EVIDENCE = "Billing office: (555) 010-0160 - weekdays 09:00-17:00\nSource:\ns3://docs/approved/contact-directory.md"
+
+    def verdict(self, request, answer, evidence=EVIDENCE):
+        grounded = mock.Mock(structured_output=mock.Mock(grounded=True, unsupported_claims=[], reason="ok"))
+        relevant = mock.Mock(structured_output=agent.RelevanceResult(relevant=True, reason="r"))
+        model = mock.Mock(side_effect=[grounded, relevant])
+        with mock.patch.object(agent, "get_verification_agent", return_value=model):
+            return agent.verify(request, answer, evidence, GateSafety(), FakeGuardrail())["verification_status"]
+
+    def test_an_approved_phone_number_passes_when_the_request_asks_for_a_phone_number(self):
+        self.assertEqual(self.verdict("What is the phone number for billing?", self.EVIDENCE), "PASS")
+
+    def test_an_approved_phone_number_fails_when_the_request_does_not_ask_for_one(self):
+        self.assertEqual(self.verdict("billing office hours", self.EVIDENCE), "FAIL")
+
+    def test_a_phone_number_missing_from_the_evidence_fails(self):
+        answer = self.EVIDENCE.replace("0160", "0199")
+        self.assertEqual(self.verdict("What is the phone number for billing?", answer), "FAIL")
+
+    def test_other_personal_data_still_fails_beside_an_approved_phone_number(self):
+        evidence = self.EVIDENCE + " jo@example.com"
+        self.assertEqual(self.verdict("What is the phone number for billing?", evidence, evidence), "FAIL")
 
 
 if __name__ == "__main__":
