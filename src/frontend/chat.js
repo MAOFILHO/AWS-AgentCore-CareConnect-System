@@ -43,14 +43,17 @@ export function show(doc, container, { text, citations, status }) {
   container.textContent = "";
   if (status) {
     const s = doc.createElement("p");
+    s.className = "status";
     s.textContent = status;
     container.appendChild(s);
   }
   const p = doc.createElement("p");
+  p.className = "reply-text";
   p.textContent = text;
   container.appendChild(p);
   if (citations.length) {
     const ul = doc.createElement("ul");
+    ul.className = "citations";
     for (const name of citations) {
       const li = doc.createElement("li");
       li.textContent = name;
