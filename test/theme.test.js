@@ -85,5 +85,5 @@ test("an escalation reply and a cited reply carry different classes", () => {
 });
 
 test("the reply region keeps aria-live=polite", () => {
-  assert.match(html, /<div id="reply" aria-live="polite">/);
+  assert.match(html, /<div id="reply"[^>]* aria-live="polite">/);
 });
