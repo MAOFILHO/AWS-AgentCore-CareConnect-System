@@ -102,13 +102,15 @@ export function init(doc, { apiUrl, fetch }) {
     }
     pending = true;
     container.setAttribute("aria-busy", "true");
+    let result;
     try {
       show(doc, container, { text: WAITING_NOTICE, citations: [] });
-      show(doc, container, await ask(question, { apiUrl, fetch }));
+      result = await ask(question, { apiUrl, fetch });
     } finally {
       pending = false;
       container.removeAttribute("aria-busy");
     }
+    show(doc, container, result);
   });
 }
 

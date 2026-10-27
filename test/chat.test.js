@@ -348,3 +348,15 @@ test("the reply region is not busy after a failed request", async () => {
   await submit("one");
   assert.equal(box.attrs["aria-busy"], undefined);
 });
+
+test("the reply region is no longer busy when the final reply or notice is rendered", async () => {
+  for (const fetch of [fakeApi(500, {}), fakeApi(200, { decision: "allow", reply: "the answer", citations: [] })]) {
+    const { box, submit } = chatPage(fetch);
+    const busyAtRender = [];
+    const append = box.appendChild;
+    box.appendChild = (c) => { busyAtRender.push(box.attrs["aria-busy"]); append(c); };
+    await submit("one");
+    assert.ok(busyAtRender.length > 1);
+    assert.deepEqual(busyAtRender.slice(1), busyAtRender.slice(1).map(() => undefined));
+  }
+});
