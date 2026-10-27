@@ -23,12 +23,40 @@ function el() {
 test("a reply shows its text and citation names", async () => {
   const fetch = fakeApi(200, { decision: "allow", reply: "Park in lot B.", citations: ["parking.md"] });
   const result = await ask("Where do I park?", { apiUrl, fetch });
-  assert.deepEqual(result, { text: "Park in lot B.", citations: ["parking.md"] });
+  assert.deepEqual(result, { text: "Park in lot B.", citations: [{ name: "Parking", uri: "parking.md" }] });
   const doc = { createElement: el };
   const box = el();
   show(doc, box, result);
   assert.equal(box.children[0].textContent, "Park in lot B.");
-  assert.equal(box.children[1].children[0].textContent, "parking.md");
+  assert.equal(box.children[1].children[0].textContent, "Parking");
+  assert.equal(box.children[1].children[0].title, "parking.md");
+});
+
+const VISITING_URI = "s3://careconnect-approved-docs-759316130780-us-east-1/approved/visiting-hours-and-policy.md";
+
+test("an allow reply hides its Source sentence and names the citation readably", async () => {
+  const fetch = fakeApi(200, { decision: "allow", reply: `Visiting is 9 to 5. Source: ${VISITING_URI}`, citations: [VISITING_URI] });
+  const result = await ask("q", { apiUrl, fetch });
+  assert.equal(result.text, "Visiting is 9 to 5.");
+  assert.deepEqual(result.citations, [{ name: "Visiting hours and policy", uri: VISITING_URI }]);
+  const box = el();
+  show({ createElement: el }, box, result);
+  assert.equal(box.children[1].children[0].textContent, "Visiting hours and policy");
+  assert.equal(box.children[1].children[0].title, VISITING_URI);
+  assert.equal(box.children.some((c) => c.textContent.includes("s3://")), false);
+});
+
+test("the ticket sentence shows a short reference and no status words", async () => {
+  const reply = "Your medication question requires review by a licensed clinician. (Ticket: 6d0c72c7-3a98-4785-b664-7d64a2c5ab79, status: pending_review)";
+  const result = await ask("q", { apiUrl, fetch: fakeApi(200, { decision: "escalate", reply, citations: [] }) });
+  assert.equal(result.text, "Your medication question requires review by a licensed clinician. (Reference: 6d0c72c7)");
+  assert.equal(result.text.includes("pending_review"), false);
+});
+
+test("a reply with neither pattern is shown unchanged", async () => {
+  const reply = "Source of parking: lot B.\nTicket office opens at 9.";
+  const result = await ask("q", { apiUrl, fetch: fakeApi(200, { decision: "allow", reply, citations: [] }) });
+  assert.equal(result.text, reply);
 });
 
 test("an escalation shows the server's notice and no citations", async () => {
@@ -104,7 +132,7 @@ test("a malformed 200 body shows the error notice", async () => {
 test("an answer without citations or with bad citations shows only valid names", async () => {
   const fetch = (citations) => fakeApi(200, { decision: "allow", reply: "No approved answer.", citations });
   assert.deepEqual(await ask("q", { apiUrl, fetch: fetch(undefined) }), { text: "No approved answer.", citations: [] });
-  assert.deepEqual(await ask("q", { apiUrl, fetch: fetch(["a.md", 7, null]) }), { text: "No approved answer.", citations: ["a.md"] });
+  assert.deepEqual(await ask("q", { apiUrl, fetch: fetch(["a.md", 7, null]) }), { text: "No approved answer.", citations: [{ name: "A", uri: "a.md" }] });
 });
 
 test("show() renders the status above the reply text with textContent", () => {
@@ -178,7 +206,7 @@ test("a reply in time is unchanged and clears the timer", async () => {
     const fetch = fakeApi(200, { decision: "allow", reply: "Park in lot B.", citations: ["parking.md"] });
     let signal;
     const result = await ask("q", { apiUrl, fetch: (u, init) => { signal = init.signal; return fetch(u, init); } });
-    assert.deepEqual(result, { text: "Park in lot B.", citations: ["parking.md"] });
+    assert.deepEqual(result, { text: "Park in lot B.", citations: [{ name: "Parking", uri: "parking.md" }] });
     mock.timers.tick(REQUEST_TIMEOUT_MS);
     assert.equal(signal.aborted, false);
   } finally {
