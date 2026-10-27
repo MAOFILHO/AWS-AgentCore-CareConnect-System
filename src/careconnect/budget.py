@@ -3,6 +3,8 @@
 import time
 from pathlib import Path
 
+from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
@@ -15,6 +17,7 @@ class Budgets(BaseModel):
     max_steps: PositiveInt
     max_seconds: float = Field(gt=0, allow_inf_nan=False)
     max_cost_usd: float = Field(gt=0, allow_inf_nan=False)
+    step_cost_usd: dict[str, Annotated[float, Field(ge=0, allow_inf_nan=False)]] = Field(default_factory=dict)
 
 
 def load_budgets(path=CONFIG_PATH):
@@ -45,10 +48,12 @@ class BudgetTracker:
             raise BudgetExceeded(name)
 
 
-class UnmeteredCost:
-    """Cost meter for the deployable Supervisor: no price feed yet, so cost stays 0."""
+class StepPriceMeter:
+    """Charges the config price of each Supervisor step; an unpriced step raises (fail closed)."""
 
-    total = 0.0
+    def __init__(self, prices):
+        self.prices = prices
+        self.total = 0.0
 
     def charge(self, name):
-        pass
+        self.total += self.prices[name]

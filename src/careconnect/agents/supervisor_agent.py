@@ -8,7 +8,7 @@ WHAT THIS AGENT DOES
     retrieval_agent.py     -> approved Knowledge Base lookups
     task_tool_agent.py     -> operational actions via AgentCore Gateway (MCP)
     escalation_agent.py    -> human-review tickets + Step Functions
-    verification_agent.py  -> grounding + deterministic safety + guardrail
+    verification_agent.py  -> grounding + relevance + deterministic safety + guardrail
   For each patient request it: runs a safety check, plans which agents are
   needed, runs them, combines only the SAFE outputs into a draft, and verifies
   that draft before returning it. Clinical questions are escalated, never answered.
@@ -40,9 +40,10 @@ from careconnect.agents.escalation_agent import escalate
 from careconnect.agents.verification_agent import get_guardrail_settings, verify
 from careconnect.api_reply import ApiReply
 from careconnect.budget import (
-    BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, UnmeteredCost, load_budgets,
+    BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, StepPriceMeter, load_budgets,
 )
 from careconnect.gateway import StagedRefillToolReply
+from careconnect.narrowing import answer_sentences
 from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
 from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
@@ -100,8 +101,6 @@ def create_plan(request, safety, state):
         plan.append({"task": "Check operational status", "agent": "task"})
     if not plan:
         plan.append({"task": "General approved-information lookup", "agent": "retrieval"})
-    for p in plan:
-        print(f"     - {p['task']} -> {p['agent']} agent")
     return plan
 
 
@@ -206,13 +205,24 @@ def execute_required_agents(request, plan, state):
 # 4. Combine only the SAFE outputs into a patient-facing draft.
 #    Returns BOTH the draft and the evidence (raw passages) it was built from.
 # ---------------------------------------------------------------------------
-def combine_safe_results(results, safety, state):
+def narrowed_passage(request, evidence):
+    """The sentences of the passage that answer the request, then its Source line. "" if none do."""
+    match = re.search(r"(?s)\A(.*?)^Source:[ \t]*\n(\S+)", evidence, flags=re.MULTILINE)
+    sentences = answer_sentences(request, match.group(1)) if match else []
+    return "\n".join(sentences + ["Source:", match.group(2)]) if sentences else ""
+
+
+def combine_safe_results(request, results, safety, state):
     state.step("Combine safe results")
     parts = []
     evidence = ""
     if "retrieval" in results:
         evidence = results["retrieval"].get("passages", "")
-        parts.append("Approved Riverside Health information:\n" + evidence)
+        answer = narrowed_passage(request, evidence)
+        if answer:
+            parts.append("Approved Riverside Health information:\n" + answer)
+        else:  # nothing answers the request: no evidence, so the flow escalates
+            evidence = ""
     if "task" in results:
         parts.append("Operational status:\n" + results["task"]["reply"])
     if "escalation" in results:
@@ -231,16 +241,13 @@ def combine_safe_results(results, safety, state):
 
 # ---------------------------------------------------------------------------
 # 5. Verify the draft against the SAME passages retrieval returned.
-#    Syncs retrieved_passages.txt so the verifier checks live evidence.
 # ---------------------------------------------------------------------------
-def verify_response(draft, evidence, state):
+def verify_response(request, draft, evidence, state):
     state.step("Verification Agent")
     if not evidence.strip():
         return {"verification_status": "SKIPPED", "reason": "no evidence available"}
-    with open("retrieved_passages.txt", "w", encoding="utf-8") as f:
-        f.write(evidence)
     try:
-        return verify(draft, evidence)
+        return verify(request, draft, evidence)
     except Exception as exc:
         return {"verification_status": "ERROR", "reason": str(exc)}
 
@@ -267,7 +274,8 @@ def supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
 
 
 def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
-    state = BudgetTracker(budgets or load_budgets(), cost_meter or UnmeteredCost(), clock)
+    budgets = budgets or load_budgets()
+    state = BudgetTracker(budgets, cost_meter or StepPriceMeter(budgets.step_cost_usd), clock)
     request_id = str(uuid.uuid4())
     outcome = {"request_id": request_id, "request": mask_pii(request), "plan": [], "verification": {"verification_status": "n/a"}}
     try:
@@ -278,19 +286,21 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         plan = create_plan(request, safety, state)
         outcome["plan"] = plan
         results = execute_required_agents(request, plan, state)
-        draft, evidence = combine_safe_results(results, safety, state)
+        draft, evidence = combine_safe_results(request, results, safety, state)
         if safety["clinical_detected"]:
             return {**outcome, "decision": "escalate", "draft_response": draft}
         if results.get("task", {}).get("staged"):  # fixed notice: never the model's free text
             return {**outcome, **staged_reply(request, results, evidence, state)}
-        verification = verify_response(draft, evidence, state)
+        verification = verify_response(request, draft, evidence, state)
     except BudgetExceeded:
         return {**outcome, "decision": "stop", "draft_response": BUDGET_MESSAGE}
-    except Exception:  # fail closed: never show the draft; no message text or error text in logs
+    except Exception as exc:  # fail closed: never show the draft; log the class name only, never message or error text
+        error_type = type(exc).__name__
         clinical = bool(outcome.get("safety", {}).get("clinical_detected"))
-        result = "escalation_failed" if clinical else "flow_failed"
-        log.error("request_id=%s safety_gate=%s outcome=%s", request_id,
-                  "escalate" if clinical else "allow", result)
+        if clinical:
+            log.error("request_id=%s safety_gate=escalate outcome=escalation_failed error_type=%s", request_id, error_type)
+        else:
+            log.error("request_id=%s safety_gate=allow outcome=flow_failed error_type=%s", request_id, error_type)
         notice = ESCALATION_FAILED_NOTICE if clinical else escalation_notice(request)
         return {**outcome, "decision": "escalate", "draft_response": notice}
     citations = approved_sources(evidence)
@@ -305,10 +315,10 @@ def staged_reply(request, results, evidence, state):
     """STAGED_NOTICE, after the verified retrieval answer if the request had one."""
     reply, citations = STAGED_NOTICE, []
     if "retrieval" in results and evidence.strip():
-        info = "Approved Riverside Health information:\n" + evidence
+        info = "Approved Riverside Health information:\n" + narrowed_passage(request, evidence)
         sources = approved_sources(evidence)
         try:  # the refill is already staged: no failure here may hide that
-            passed = bool(sources) and verify_response(info, evidence, state).get("verification_status") == "PASS"
+            passed = bool(sources) and verify_response(request, info, evidence, state).get("verification_status") == "PASS"
             if passed:
                 reply, citations = info + "\n\n" + STAGED_NOTICE, sources
             else:

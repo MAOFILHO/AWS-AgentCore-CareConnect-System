@@ -23,6 +23,15 @@ CLINICAL_PATTERNS = [
     r"\bincrease .*(dose|medication)",
     r"\bdecrease .*(dose|medication)",
     r"\bis it safe to (take|stop|skip)\b",
+    r"\bcan i take .* with\b",
+    r"\bis .* dangerous\b",
+    r"\bhow many pills\b",
+    r"\b(tylenol|paracetamol|acetaminophen|ibuprofen|advil|motrin|aspirin|antibiotics?|insulin|warfarin|amoxicillin)\b",
+    r"\bsafe (for|to give)\b",
+    r"\bcan i give\b",
+    r"\bgive my (child|baby|kid|son|daughter)\b",
+    r"\bpregnan\w*\b.*\b(medic\w*|drugs?|pills?|dose|tablets?)\b",
+    r"\b(medic\w*|drugs?|pills?|dose|tablets?)\b.*\bpregnan\w*",
 ]
 
 # Patterns that indicate an URGENT / emergency situation (must be escalated).
@@ -34,6 +43,17 @@ URGENT_PATTERNS = [
     r"\bunconscious\b",
     r"\bsevere bleeding\b",
     r"\bpassed out\b",
+    r"\bheart[- ]?attacks?\b",
+    r"\bstrokes?\b",
+    r"\boverdos\w*",
+    r"\btoo many pills\b",
+    r"\bsuicid\w*",
+    r"\bkill\w* (myself|himself|herself|themselves)\b",
+    r"\bself[- ]?harm\w*",
+    r"\banaphyla\w*",
+    r"\bseiz(ures?|ing)\b",
+    r"\btrouble (breathing|to breathe)\b",
+    r"\bdifficult(y|ies) (breathing|to breathe)\b",
 ]
 
 # Health or symptom wording. Any request that contains it is escalated before

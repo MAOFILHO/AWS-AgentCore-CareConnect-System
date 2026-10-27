@@ -1,8 +1,8 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  ask, show, init, ERROR_NOTICE,
+  ask, show, init, ERROR_NOTICE, REQUEST_TIMEOUT_MS, WAITING_NOTICE, NOT_CONNECTED_NOTICE,
 } from "../src/frontend/chat.js";
 
 const ESCALATION_NOTICE = "A licensed clinician will follow up with you.";
@@ -12,7 +12,9 @@ const apiUrl = "https://api.test/careconnect";
 const fakeApi = (status, body) => async () => ({ ok: status < 400, status, json: async () => body });
 
 function el() {
-  const e = { children: [], textContent: "", listeners: {} };
+  let text = "";
+  const e = { children: [], listeners: {} };
+  Object.defineProperty(e, "textContent", { get: () => text, set: (v) => { text = v; if (v === "") e.children = []; } });
   e.appendChild = (c) => { e.children.push(c); };
   e.addEventListener = (n, f) => { e.listeners[n] = f; };
   return e;
@@ -137,4 +139,117 @@ test("a staged reply shows the awaiting-approval status; false or missing shows 
   const box = el();
   show({ createElement: el }, box, { text: "<b>x</b>", citations: [], status: AWAITING });
   assert.equal(box.children[0].textContent, AWAITING);
+});
+
+const hangs = (_url, { signal }) => new Promise((_, reject) => {
+  signal.addEventListener("abort", () => reject(new Error("aborted")));
+});
+
+test("a request that never answers aborts after the timeout and shows the error", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const pending = ask("q", { apiUrl, fetch: hangs });
+    mock.timers.tick(REQUEST_TIMEOUT_MS - 1);
+    let settled = false;
+    pending.then(() => { settled = true; });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(settled, false);
+    mock.timers.tick(1);
+    assert.deepEqual(await pending, { text: ERROR_NOTICE, citations: [] });
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("the timeout is 35 seconds", () => {
+  assert.equal(REQUEST_TIMEOUT_MS, 35_000);
+});
+
+test("a reply in time is unchanged and clears the timer", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const fetch = fakeApi(200, { decision: "allow", reply: "Park in lot B.", citations: ["parking.md"] });
+    let signal;
+    const result = await ask("q", { apiUrl, fetch: (u, init) => { signal = init.signal; return fetch(u, init); } });
+    assert.deepEqual(result, { text: "Park in lot B.", citations: ["parking.md"] });
+    mock.timers.tick(REQUEST_TIMEOUT_MS);
+    assert.equal(signal.aborted, false);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+function chatPage(fetch) {
+  const form = el(), input = el(), box = el();
+  const doc = { createElement: el, getElementById: (id) => ({ "chat-form": form, question: input, reply: box })[id] };
+  init(doc, { apiUrl, fetch });
+  const submit = (q) => { input.value = q; return form.listeners.submit({ preventDefault() {} }); };
+  return { box, submit };
+}
+
+test("a second submit while one is pending sends no second request", async () => {
+  let calls = 0;
+  let release;
+  const fetch = () => { calls += 1; return new Promise((r) => { release = r; }); };
+  const { box, submit } = chatPage(fetch);
+  const first = submit("one");
+  await submit("two");
+  assert.equal(calls, 1);
+  release({ ok: true, json: async () => ({ decision: "allow", reply: "first answer", citations: [] }) });
+  await first;
+  assert.equal(box.children[0].textContent, "first answer");
+});
+
+test("after a reply or an error the next submit works", async () => {
+  const replies = [fakeApi(500, {}), fakeApi(200, { decision: "allow", reply: "ok", citations: [] })];
+  let calls = 0;
+  const { box, submit } = chatPage((...a) => replies[calls++](...a));
+  await submit("one");
+  assert.equal(box.children[0].textContent, ERROR_NOTICE);
+  await submit("two");
+  assert.equal(calls, 2);
+  assert.equal(box.children.at(-1).textContent, "ok");
+});
+
+test("the waiting text shows after submit and the reply replaces it", async () => {
+  let release;
+  const { box, submit } = chatPage(() => new Promise((r) => { release = r; }));
+  const first = submit("one");
+  assert.equal(box.textContent, "");
+  assert.equal(box.children.at(-1).textContent, WAITING_NOTICE);
+  assert.equal(WAITING_NOTICE, "Looking this up\u2026");
+  release({ ok: true, json: async () => ({ decision: "allow", reply: "the answer", citations: [] }) });
+  await first;
+  assert.deepEqual(box.children.map((c) => c.textContent), ["the answer"]);
+});
+
+test("the fixed error replaces the waiting text", async () => {
+  const { box, submit } = chatPage(fakeApi(500, {}));
+  await submit("one");
+  assert.deepEqual(box.children.map((c) => c.textContent), [ERROR_NOTICE]);
+});
+
+test("an empty question shows no waiting text", async () => {
+  const { box, submit } = chatPage(fakeApi(200, {}));
+  await submit("   ");
+  assert.equal(box.children.length, 0);
+});
+
+test("the placeholder API URL shows the not-connected text and never calls fetch", async () => {
+  let calls = 0;
+  const form = el(), input = el(), box = el();
+  const doc = { createElement: el, getElementById: (id) => ({ "chat-form": form, question: input, reply: box })[id] };
+  init(doc, { apiUrl: "https://YOUR-API-ID.execute-api.us-east-1.amazonaws.com/prod/careconnect", fetch: () => { calls += 1; } });
+  input.value = "when is the clinic open";
+  await form.listeners.submit({ preventDefault() {} });
+  assert.equal(calls, 0);
+  assert.equal(NOT_CONNECTED_NOTICE, "This site is not connected yet. Please contact the hospital.");
+  assert.deepEqual(box.children.map((c) => c.textContent), [NOT_CONNECTED_NOTICE]);
+});
+
+test("a real API URL still calls fetch", async () => {
+  let calls = 0;
+  const { submit } = chatPage(() => { calls += 1; return fakeApi(500, {})(); });
+  await submit("one");
+  assert.equal(calls, 1);
 });

@@ -1,0 +1,48 @@
+# Promotes staging to main (Docs/adr/0002-staging-to-main-promotion.md). Started by hand.
+# Runs the AGENTS.md checks on staging, then writes the compare URL to the job summary. It never pushes or opens a PR.
+name: promote
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: promote
+  cancel-in-progress: false
+jobs:
+  checks:
+    name: tests-typecheck-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.head.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { ref: staging, persist-credentials: false }
+      - id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci || npm install
+      - run: python3 -m pip install -r requirements.txt
+      - run: npm test
+      - run: PYTHONPATH=src python3 -m unittest discover -s test
+      - run: npm run typecheck --if-present
+      - run: npm run lint --if-present
+      - run: npm run build --if-present
+  handoff:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write the compare URL and check summary
+        env:
+          SHA: ${{ needs.checks.outputs.sha }}
+          COMPARE_URL: ${{ github.server_url }}/${{ github.repository }}/compare/main...${{ needs.checks.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Promote staging to main"
+            echo "All AGENTS.md checks passed on staging at \`$SHA\` ($RUN_URL): npm test, unittest, typecheck, lint, build."
+            echo "Compare: $COMPARE_URL"
+            echo "Open the staging to main PR only if staging is still at \`$SHA\`, then run scripts/smoke.sh against the staging deploy before merging."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CareConnect Lambdas (issue 94) on Python 3.12 with least-privilege roles, no provisioned
+  concurrency. Zip each Docs/Repo/lambda-functions/<name>/ dir to s3://<CodeBucket>/<name>.zip,
+  then: aws cloudformation deploy --stack-name careconnect-lambdas --region us-east-1
+  --template-file infra/careconnect-lambdas.yaml --capabilities CAPABILITY_IAM
+  --parameter-overrides CodeBucket=<bucket>. Delete console-made functions and log groups first.
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: S3 bucket that holds the two code zips
+  SafetyCodeKey:
+    Type: String
+    Default: careconnect-deterministic-safety.zip
+    Description: S3 key of the zip with lambda_function.py of careconnect-deterministic-safety
+  ToolsCodeKey:
+    Type: String
+    Default: careconnect-mock-hospital-tools.zip
+    Description: S3 key of the zip with lambda_function.py of careconnect-mock-hospital-tools
+  PydanticLayerArn:
+    Type: String
+    Default: ""
+    Description: ARN of a pydantic v2 layer for Python 3.12. Leave empty if the functions need none.
+
+Conditions:
+  HasPydanticLayer: !Not [!Equals [!Ref PydanticLayerArn, ""]]
+
+Resources:
+  SafetyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/careconnect-deterministic-safety
+      RetentionInDays: 14
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  ToolsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/careconnect-mock-hospital-tools
+      RetentionInDays: 14
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  SafetyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-own-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${SafetyLogGroup.Arn}:*"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  ToolsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-own-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${ToolsLogGroup.Arn}:*"
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  SafetyFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SafetyLogGroup
+    Properties:
+      FunctionName: careconnect-deterministic-safety
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt SafetyRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Layers: !If [HasPydanticLayer, [!Ref PydanticLayerArn], !Ref "AWS::NoValue"]
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref SafetyCodeKey
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+  ToolsFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ToolsLogGroup
+    Properties:
+      FunctionName: careconnect-mock-hospital-tools
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ToolsRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Layers: !If [HasPydanticLayer, [!Ref PydanticLayerArn], !Ref "AWS::NoValue"]
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref ToolsCodeKey
+      Tags:
+        - { Key: Project, Value: careconnect }
+        - { Key: issue, Value: "94" }
+
+Outputs:
+  SafetyFunctionArn:
+    Value: !GetAtt SafetyFunction.Arn
+  ToolsFunctionArn:
+    Value: !GetAtt ToolsFunction.Arn

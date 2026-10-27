@@ -1,0 +1,12 @@
+test_every_taggable_resource_is_tagged (test_gateway_stack.GatewayTemplateTest.test_every_taggable_resource_is_tagged) ... ok
+test_gateway_role_may_only_invoke_the_tools_lambda (test_gateway_stack.GatewayTemplateTest.test_gateway_role_may_only_invoke_the_tools_lambda) ... ok
+test_gateway_uses_iam_auth_over_mcp (test_gateway_stack.GatewayTemplateTest.test_gateway_uses_iam_auth_over_mcp) ... ok
+test_no_account_ids_or_literal_arns (test_gateway_stack.GatewayTemplateTest.test_no_account_ids_or_literal_arns) ... ok
+test_no_forbidden_resource_type (test_gateway_stack.GatewayTemplateTest.test_no_forbidden_resource_type) ... ok
+test_outputs_the_gateway_url_and_id (test_gateway_stack.GatewayTemplateTest.test_outputs_the_gateway_url_and_id) ... ok
+test_target_is_the_tools_lambda_with_its_three_tools (test_gateway_stack.GatewayTemplateTest.test_target_is_the_tools_lambda_with_its_three_tools) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.023s
+
+OK

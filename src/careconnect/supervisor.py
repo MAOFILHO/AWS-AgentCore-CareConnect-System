@@ -34,14 +34,14 @@ def _outcome_label(out):
 
 def supervisor_flow(
     request, knowledge_base, ticket_store, grounding, guardrail, document_processor=None,
-    *, workflow, approved, cost_meter, budgets=None, clock=None, gateway=None, idempotency_key=None,
+    *, relevance, workflow, approved, cost_meter, budgets=None, clock=None, gateway=None, idempotency_key=None,
     patient_reference=None,
 ):
     tracker = BudgetTracker(budgets or load_budgets(), cost_meter, clock)
     request_id = str(uuid.uuid4())
     try:
         out = _flow(
-            request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
+            request, knowledge_base, ticket_store, workflow, grounding, guardrail, relevance, document_processor,
             approved, tracker, request_id, gateway, idempotency_key, patient_reference,
         )
     except BudgetExceeded:
@@ -57,7 +57,7 @@ def supervisor_flow(
 
 
 def _flow(
-    request, knowledge_base, ticket_store, workflow, grounding, guardrail, document_processor,
+    request, knowledge_base, ticket_store, workflow, grounding, guardrail, relevance, document_processor,
     approved, tracker, request_id, gateway=None, idempotency_key=None, patient_reference=None,
 ):
     gate = classify(request)
@@ -96,9 +96,7 @@ def _flow(
         draft = document_processor.process(draft).text
     citations = [name for name, _ in hits]
     tracker.step("verify")
-    result = verify(
-        draft, citations, dict(hits), grounding, guardrail
-    )
+    result = verify(request, draft, citations, dict(hits), grounding, guardrail, relevance)
     if result.status != "PASS":
         return escalate(UNVERIFIED_REASON, "unverified_answer")
     return {**outcome, "decision": "allow", "reply": draft, "citations": citations}

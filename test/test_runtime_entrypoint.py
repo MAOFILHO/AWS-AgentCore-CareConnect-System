@@ -24,8 +24,7 @@ class RuntimeEntrypointTest(unittest.TestCase):
                 mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
                 mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1"}), \
                 mock.patch.dict(sys.modules, {"careconnect.agents.retrieval_agent": retrieval}), \
-                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
-                mock.patch("builtins.open", mock.mock_open(read_data="")):
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
             out = runtime_entrypoint.invoke({"prompt": text})
         self.assertEqual(set(out), KEYS)
         ApiReply.model_validate(out)
@@ -95,6 +94,13 @@ class RuntimeEntrypointTest(unittest.TestCase):
                 out = runtime_entrypoint.invoke(payload)
                 flow.assert_not_called()
             self.assertEqual(out, {"decision": "escalate", "reply": ESCALATION_FAILED_NOTICE, "citations": [], "staged": False})
+
+    def test_app_entrypoint_escalates_an_empty_payload(self):
+        handler = runtime_entrypoint.app.handlers["main"]
+        with mock.patch.object(runtime_entrypoint, "supervisor_flow") as flow:
+            out = handler({})
+        flow.assert_not_called()
+        self.assertEqual(out["decision"], "escalate")
 
     def test_delegates_to_shared_flow(self):
         self.assertIs(runtime_entrypoint.supervisor_flow, supervisor_agent.supervisor_flow)

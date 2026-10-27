@@ -16,6 +16,12 @@ class FakeKnowledgeBase:
             if words & set((name + " " + text).lower().replace("-", " ").split())
         ]
 
+    def search(self, query):
+        return [
+            {"content": {"text": text}, "location": {"s3Location": {"uri": name}}, "score": 1.0}
+            for name, text in self.retrieve(query)
+        ]
+
 
 class FakeEscalationTicketStore:
     def __init__(self):
@@ -35,6 +41,7 @@ class FakeApprovalWorkflow:
         if self.error:
             raise RuntimeError("workflow unavailable")
         self.started.append(ticket)
+        return "fake-execution"
 
 
 class FakeGrounding:
@@ -53,6 +60,29 @@ class FakeGrounding:
         )
 
 
+class AnyHitKnowledgeBase(FakeKnowledgeBase):
+    """Retrieval returns its best match even when nothing relevant exists."""
+
+    def retrieve(self, query):
+        return list(self.documents.items())
+
+
+STOPWORDS = {"a", "an", "and", "are", "for", "in", "is", "of", "the", "to", "what", "when", "where"}
+
+
+class FakeRelevance:
+    """Relevance check: the draft must share a content word with the request."""
+
+    def __init__(self, error=False):
+        self.error = error
+
+    def check(self, request, draft):
+        if self.error:
+            raise RuntimeError("relevance unavailable")
+        words = lambda text: set(re.findall(r"[a-z0-9]+", text.lower())) - STOPWORDS
+        return bool(words(request) & words(draft))
+
+
 class FakeGuardrail:
     def __init__(self, allow=True, error=False):
         self.allow = allow
@@ -62,6 +92,19 @@ class FakeGuardrail:
         if self.error:
             raise RuntimeError("guardrail unavailable")
         return self.allow
+
+    def apply(self, text):
+        if self.error:
+            raise RuntimeError("guardrail unavailable")
+        return {"action": "NONE" if self.allow else "GUARDRAIL_INTERVENED", "reason": ""}
+
+
+class FakeSafetyLambda:
+    def __init__(self, classification=None):
+        self.classification = classification or {}
+
+    def classify(self, text):
+        return {"classification": self.classification}
 
 
 class FakeCostMeter:
