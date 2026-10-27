@@ -15,6 +15,8 @@ const uncited = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citation
 const escalated = answer("req-2", { decision: "escalate", reply: "A clinician will review this.", citations: [], staged: false });
 const answered = answer("req-2", { decision: "allow", reply: "Take two.", citations: ["a.md"], staged: false });
 const wrongSource = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/evaluation-untrusted/doc.md"], staged: false });
+const mixedSources = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/approved/visiting-hours-and-policy.md", "s3://bucket/evaluation-untrusted/doc.md"], staged: false });
+const lookalike = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/unapproved/doc.md"], staged: false });
 const blocked = answer("req-4", { decision: "block", reply: "Blocked.", citations: [], staged: false });
 
 // A fake curl on PATH answers each probe by its prompt: routine, clinical, urgent and manipulation.
@@ -68,6 +70,14 @@ test("smoke.sh fails when the routine citation is not an approved source", () =>
   const r = run(["https://api.example.com"], { routine: wrongSource });
   assert.equal(r.status, 1);
   assert.match(r.stdout, /routine: FAIL/);
+});
+
+test("smoke.sh fails when any routine citation is not an approved source", () => {
+  for (const routine of [mixedSources, lookalike]) {
+    const r = run(["https://api.example.com"], { routine });
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /routine: FAIL/);
+  }
 });
 
 test("smoke.sh fails when the urgent-only probe is answered", () => {
