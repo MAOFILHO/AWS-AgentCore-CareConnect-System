@@ -4,9 +4,25 @@ export const ERROR_NOTICE = "Something went wrong. Please try again.";
 const ESCALATE_STATUS = "Sent to a clinician for review.";
 const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
 const AWAITING_STATUS = "Awaiting clinician approval.";
+// Same text as ESCALATION_FAILED_NOTICE in src/careconnect/supervisor.py.
+const ESCALATION_FAILED_NOTICE = "We could not pass your request to a clinician. Please contact Riverside Health directly, or call emergency services if your symptoms are urgent.";
 // Supervisor limit (30 s) plus 5 s margin.
 export const REQUEST_TIMEOUT_MS = 35_000;
 const STATUS = { escalate: ESCALATE_STATUS, block: STOPPED_STATUS, stop: STOPPED_STATUS };
+
+// Show a document name a patient can read: file name only, no extension, hyphens as spaces.
+function citationName(uri) {
+  const file = uri.slice(uri.lastIndexOf("/") + 1).replace(/\.[^.]*$/, "").replace(/-/g, " ");
+  return file ? file[0].toUpperCase() + file.slice(1) : uri;
+}
+
+// Drop the backend's trailing "Source: <uri>" sentence and shorten the ticket sentence.
+// Text that matches neither pattern is returned unchanged.
+function readableReply(reply) {
+  return reply
+    .replace(/(?:\s*Source:\s*\S+)+\s*$/, "")
+    .replace(/\(Ticket: ([^\s,)]{1,8})[^\s,)]*, status: [a-z_]+\)/g, "(Reference: $1)");
+}
 
 // Turn the API reply into what the page shows. Anything unexpected is the fixed error.
 export async function ask(question, { apiUrl, fetch }) {
@@ -22,13 +38,19 @@ export async function ask(question, { apiUrl, fetch }) {
     if (!res.ok) return { text: ERROR_NOTICE, citations: [] };
     const body = await res.json();
     if (typeof body.decision === "string" && Object.hasOwn(STATUS, body.decision) &&typeof body.reply === "string") {
-      return { text: body.reply, citations: [], status: STATUS[body.decision] };
+      const text = readableReply(body.reply);
+      return body.reply === ESCALATION_FAILED_NOTICE
+        ? { text, citations: [] }
+        : { text, citations: [], status: STATUS[body.decision] };
     }
     if (body.decision === "allow" && typeof body.reply === "string") {
-      const citations = Array.isArray(body.citations) ? body.citations.filter((c) => typeof c === "string") : [];
+      const citations = Array.isArray(body.citations)
+        ? body.citations.filter((c) => typeof c === "string").map((uri) => ({ name: citationName(uri), uri }))
+        : [];
+      const text = readableReply(body.reply);
       return body.staged === true
-        ? { text: body.reply, citations, status: AWAITING_STATUS }
-        : { text: body.reply, citations };
+        ? { text, citations, status: AWAITING_STATUS }
+        : { text, citations };
     }
   } catch {
     // fall through to the fixed error
@@ -43,17 +65,21 @@ export function show(doc, container, { text, citations, status }) {
   container.textContent = "";
   if (status) {
     const s = doc.createElement("p");
+    s.className = "status";
     s.textContent = status;
     container.appendChild(s);
   }
   const p = doc.createElement("p");
+  p.className = "reply-text";
   p.textContent = text;
   container.appendChild(p);
   if (citations.length) {
     const ul = doc.createElement("ul");
-    for (const name of citations) {
+    ul.className = "citations";
+    for (const { name, uri } of citations) {
       const li = doc.createElement("li");
       li.textContent = name;
+      li.title = uri;
       ul.appendChild(li);
     }
     container.appendChild(ul);

@@ -1,0 +1,140 @@
+:root {
+  --bg: #f3f6fb;
+  --surface: #ffffff;
+  --text: #1f2933;
+  --muted: #52606d;
+  --border: #cbd5e1;
+  --primary: #0b5cad;
+  --primary-hover: #084a8c;
+  --primary-text: #ffffff;
+  --callout-bg: #fff7e6;
+  --callout-border: #b45309;
+  --space: 1rem;
+  --radius: 8px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --text: #e5edf5;
+    --muted: #a9b6c6;
+    --border: #334155;
+    --primary: #7db8f5;
+    --primary-hover: #a3cdf8;
+    --primary-text: #0b1f33;
+    --callout-bg: #3a2a0a;
+    --callout-border: #f5b04c;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--space);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.5;
+}
+
+header {
+  margin-bottom: var(--space);
+}
+
+h1 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1.75rem;
+}
+
+.sub-line {
+  margin: 0;
+  color: var(--muted);
+}
+
+form, #reply:not(:empty) {
+  padding: var(--space);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+#reply:not(:empty) {
+  margin-top: var(--space);
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+#question {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+button {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: var(--primary);
+  color: var(--primary-text);
+  border: 0;
+  border-radius: var(--radius);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+button:focus-visible,
+#question:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#reply p { margin: 0; }
+
+#reply .reply-text + .citations,
+#reply .status + .reply-text {
+  margin-top: 0.5rem;
+}
+
+.status {
+  padding: 0.5rem 0.75rem;
+  background: var(--callout-bg);
+  border: 2px solid var(--callout-border);
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.citations {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+@media (min-width: 600px) {
+  button { width: auto; }
+}

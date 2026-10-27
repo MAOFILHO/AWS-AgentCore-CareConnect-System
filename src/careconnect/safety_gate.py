@@ -1,5 +1,8 @@
-"""Safety gate: deterministic rules, no AWS. Rules copied unchanged from
-Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py."""
+"""Safety gate: deterministic rules, no AWS. The Lambda in
+Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py
+classifies draft replies and must keep the same CLINICAL_PATTERNS and URGENT_PATTERNS as this module.
+It still lags this module on sanitize_retrieved.
+test/test_safety_gate.py compares the clinical and urgent results of the two copies."""
 
 import re
 import unicodedata
