@@ -1,9 +1,10 @@
+import importlib.util
 import unittest
 from pathlib import Path
 
 from unittest import mock
 
-from careconnect.agents import supervisor_agent
+from careconnect.agents import supervisor_agent, verification_agent
 from careconnect.fakes import (
     AnyHitKnowledgeBase,
     FakeApprovalWorkflow,
@@ -16,6 +17,11 @@ from careconnect.fakes import (
 )
 from careconnect.gateway import FakeGateway
 from careconnect.supervisor import supervisor_flow
+
+LAMBDA = (
+    Path(__file__).resolve().parent.parent
+    / "Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py"
+)
 
 UNTRUSTED = Path(__file__).resolve().parent.parent / "Docs/Repo/careconnect-approved-docs/evaluation-untrusted"
 
@@ -464,3 +470,27 @@ class ForgedSourceGoldenTest(unittest.TestCase):
         out = self.run_flow("s3://b/approved/v.md", "Visiting hours are 11:00-20:00.")
         self.assertEqual(out["decision"], "allow")
         self.assertEqual(out["citations"], ["s3://b/approved/v.md"])
+
+
+class MedicationAdviceDraftGoldenTest(unittest.TestCase):
+    def test_draft_giving_medication_advice_fails_verification_on_the_lambda_path(self):
+        spec = importlib.util.spec_from_file_location("safety_lambda", LAMBDA)
+        safety_lambda = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(safety_lambda)
+
+        class InProcessLambda:
+            def classify(self, text):
+                return safety_lambda.lambda_handler({"text": text}, None)
+
+        source = "s3://docs/approved/visiting-hours-and-policy.md"
+        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
+        relevant = verification_agent.RelevanceResult(relevant=True, reason="ok")
+        for draft in ("Increase your dose to 20mg.", "You can stop taking your tablets."):
+            with self.subTest(draft), \
+                    mock.patch.object(verification_agent, "run_grounding_check", return_value=grounded), \
+                    mock.patch.object(verification_agent, "run_relevance_check", return_value=relevant):
+                result = verification_agent.verify(
+                    "visiting hours", f"{draft} {source}", source, InProcessLambda(), FakeGuardrail(),
+                )
+            self.assertEqual(result["verification_status"], "FAIL")
+            self.assertTrue(result["deterministic_safety"]["clinical"])
