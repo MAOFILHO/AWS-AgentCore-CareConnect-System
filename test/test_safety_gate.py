@@ -31,6 +31,30 @@ MEDICATION_ADVICE = [
     "Is it safe to skip a dose?",
     "Change the medicine you take",
 ]
+URGENT_PHRASES = [
+    "I think my dad is having a heart attack",
+    "two heart attacks",
+    "My mum may have had a stroke",
+    "I think I am having a stroke",
+    "My friend took an overdose",
+    "he overdosed",
+    "I took too many pills",
+    "I am thinking about suicide",
+    "I feel suicidal",
+    "I want to kill myself",
+    "he tried killing himself",
+    "I want to self-harm",
+    "My son is going into anaphylaxis",
+    "an anaphylactic reaction",
+    "She is having a seizure",
+    "he is seizing",
+    "I have trouble breathing",
+    "trouble to breathe",
+    "I have difficulty breathing",
+    "difficulties breathing",
+    "I have chest pain",
+    "I can't breathe",
+]
 
 
 class SafetyGateTest(unittest.TestCase):
@@ -98,11 +122,10 @@ class SafetyGateTest(unittest.TestCase):
 
 class LambdaParityTest(unittest.TestCase):
     def test_both_copies_classify_alike(self):
-        for question in DRUG_QUESTIONS + MEDICATION_ADVICE + ROUTINE_QUESTIONS:
-            with self.subTest(question):
-                self.assertEqual(
-                    classify(question)["clinical"], safety_lambda.classify(question)["clinical"]
-                )
+        for question in DRUG_QUESTIONS + MEDICATION_ADVICE + ROUTINE_QUESTIONS + URGENT_PHRASES:
+            for flag in ("clinical", "urgent"):
+                with self.subTest(question, flag=flag):
+                    self.assertEqual(classify(question)[flag], safety_lambda.classify(question)[flag])
 
     def test_drug_questions_are_clinical_and_routine_ones_are_not(self):
         for question in DRUG_QUESTIONS + MEDICATION_ADVICE:
