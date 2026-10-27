@@ -20,6 +20,17 @@ DRUG_QUESTIONS = [
     "is advil safe while pregnant",
 ]
 ROUTINE_QUESTIONS = ["What are the visiting hours?", "Where is the parking?", "How do I book an appointment?"]
+MEDICATION_ADVICE = [
+    "Is it safe to stop your medication?",
+    "Increase your dose to 20mg",
+    "Decrease your medication slowly",
+    "You should stop taking aspirin",
+    "Stop my pills if you feel better",
+    "Should I stop the tablets?",
+    "Should I start a new course?",
+    "Is it safe to skip a dose?",
+    "Change the medicine you take",
+]
 
 
 class SafetyGateTest(unittest.TestCase):
@@ -87,14 +98,14 @@ class SafetyGateTest(unittest.TestCase):
 
 class LambdaParityTest(unittest.TestCase):
     def test_both_copies_classify_alike(self):
-        for question in DRUG_QUESTIONS + ROUTINE_QUESTIONS:
+        for question in DRUG_QUESTIONS + MEDICATION_ADVICE + ROUTINE_QUESTIONS:
             with self.subTest(question):
                 self.assertEqual(
                     classify(question)["clinical"], safety_lambda.classify(question)["clinical"]
                 )
 
     def test_drug_questions_are_clinical_and_routine_ones_are_not(self):
-        for question in DRUG_QUESTIONS:
+        for question in DRUG_QUESTIONS + MEDICATION_ADVICE:
             with self.subTest(question):
                 self.assertTrue(classify(question)["clinical"])
                 self.assertTrue(safety_lambda.classify(question)["clinical"])
