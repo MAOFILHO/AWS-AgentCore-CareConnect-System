@@ -72,6 +72,7 @@ export function show(doc, container, { text, citations, status }) {
   const p = doc.createElement("p");
   p.className = "reply-text";
   p.textContent = text;
+  if (text === ERROR_NOTICE || text === ESCALATION_FAILED_NOTICE) p.setAttribute("role", "alert");
   container.appendChild(p);
   if (citations.length) {
     const ul = doc.createElement("ul");
@@ -100,11 +101,13 @@ export function init(doc, { apiUrl, fetch }) {
       return;
     }
     pending = true;
+    container.setAttribute("aria-busy", "true");
     try {
       show(doc, container, { text: WAITING_NOTICE, citations: [] });
       show(doc, container, await ask(question, { apiUrl, fetch }));
     } finally {
       pending = false;
+      container.removeAttribute("aria-busy");
     }
   });
 }
