@@ -58,7 +58,8 @@ def answer_sentences(request, text):
     A request word may match the sentence or its section heading, so "maternity" finds the
     sentences under "Maternity and birthing". Ties go to the heading match, then to the
     earlier sentence. A passage with no line breaks has no heading line, so a word of the
-    sentence counts three times and a word of the rest of its section counts once. An empty list
+    sentence counts three times and a word of the rest of its section counts once, and the sentences
+    come only from the section that holds the best-scoring one. An empty list
     means nothing answers the request.
     """
     wanted = _stems(request)
@@ -69,6 +70,9 @@ def answer_sentences(request, text):
         own = wanted & _stems(sentence)
         matched = 2 * len(own) + len(in_heading) if flat else len(in_heading | own)
         if matched:
-            scored.append((-matched, 0 if flat else -len(in_heading), index, sentence))
+            scored.append((-matched, 0 if flat else -len(in_heading), index, sentence, heading))
+    if flat and scored:
+        top_section = min(scored)[4]
+        scored = [entry for entry in scored if entry[4] == top_section]
     best = sorted(scored)[:MAX_SENTENCES]
-    return [s for *_, s in sorted(best, key=lambda s: s[2])]
+    return [entry[3] for entry in sorted(best, key=lambda entry: entry[2])]

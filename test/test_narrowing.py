@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -86,3 +87,20 @@ class AnswerSentencesTest(unittest.TestCase):
                 for sentence in answer_sentences(heading.lstrip("# "), flatten(text)):
                     self.assertNotIn("#", sentence, path.name)
                     self.assertNotIn(title, sentence, path.name)
+
+    def test_flattened_general_ward_question_quotes_the_general_ward_section_only(self):
+        out = answer_sentences("What are the general ward visiting hours?", flatten(VISITING))
+        self.assertTrue(out)
+        self.assertIn("11:00", out[0])
+        self.assertNotIn("Other visitors follow general ward hours.", out)
+        for sentence in out:
+            self.assertIn(sentence, flatten(VISITING.split("## Intensive")[0]))
+
+    def test_flattened_reply_lies_in_one_section_of_the_document(self):
+        for path in sorted(APPROVED.glob("*.md")):
+            text = path.read_text()
+            sections = [flatten(s) for s in re.split(r"(?m)^(?=## )", text)[1:]]
+            for heading in (line for line in text.splitlines() if line.startswith("## ")):
+                out = answer_sentences(heading.lstrip("# "), flatten(text))
+                if out:
+                    self.assertTrue(any(all(s in section for s in out) for section in sections), (path.name, out))
