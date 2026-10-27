@@ -4,6 +4,8 @@ export const ERROR_NOTICE = "Something went wrong. Please try again.";
 const ESCALATE_STATUS = "Sent to a clinician for review.";
 const STOPPED_STATUS = "We could not answer this. Please contact the hospital.";
 const AWAITING_STATUS = "Awaiting clinician approval.";
+// Same text as ESCALATION_FAILED_NOTICE in src/careconnect/supervisor.py.
+const ESCALATION_FAILED_NOTICE = "We could not pass your request to a clinician. Please contact Riverside Health directly, or call emergency services if your symptoms are urgent.";
 // Supervisor limit (30 s) plus 5 s margin.
 export const REQUEST_TIMEOUT_MS = 35_000;
 const STATUS = { escalate: ESCALATE_STATUS, block: STOPPED_STATUS, stop: STOPPED_STATUS };
@@ -22,7 +24,9 @@ export async function ask(question, { apiUrl, fetch }) {
     if (!res.ok) return { text: ERROR_NOTICE, citations: [] };
     const body = await res.json();
     if (typeof body.decision === "string" && Object.hasOwn(STATUS, body.decision) &&typeof body.reply === "string") {
-      return { text: body.reply, citations: [], status: STATUS[body.decision] };
+      return body.reply === ESCALATION_FAILED_NOTICE
+        ? { text: body.reply, citations: [] }
+        : { text: body.reply, citations: [], status: STATUS[body.decision] };
     }
     if (body.decision === "allow" && typeof body.reply === "string") {
       const citations = Array.isArray(body.citations) ? body.citations.filter((c) => typeof c === "string") : [];
