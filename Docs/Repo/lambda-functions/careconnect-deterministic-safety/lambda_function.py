@@ -71,6 +71,17 @@ URGENT_PATTERNS = [
     r"\bunconscious\b",
     r"\bsevere bleeding\b",
     r"\bpassed out\b",
+    r"\bheart[- ]?attacks?\b",
+    r"\bstrokes?\b",
+    r"\boverdos\w*",
+    r"\btoo many pills\b",
+    r"\bsuicid\w*",
+    r"\bkill\w* (myself|himself|herself|themselves)\b",
+    r"\bself[- ]?harm\w*",
+    r"\banaphyla\w*",
+    r"\bseiz(ures?|ing)\b",
+    r"\btrouble (breathing|to breathe)\b",
+    r"\bdifficult(y|ies) (breathing|to breathe)\b",
 ]
 
 # Patterns that indicate a prompt-injection / manipulation attempt (must block).

@@ -494,3 +494,27 @@ class MedicationAdviceDraftGoldenTest(unittest.TestCase):
                 )
             self.assertEqual(result["verification_status"], "FAIL")
             self.assertTrue(result["deterministic_safety"]["clinical"])
+
+
+class UrgentDraftGoldenTest(unittest.TestCase):
+    def test_urgent_draft_fails_verification_on_the_lambda_path(self):
+        spec = importlib.util.spec_from_file_location("safety_lambda", LAMBDA)
+        safety_lambda = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(safety_lambda)
+
+        class InProcessLambda:
+            def classify(self, text):
+                return safety_lambda.lambda_handler({"text": text}, None)
+
+        source = "s3://docs/approved/visiting-hours-and-policy.md"
+        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
+        relevant = verification_agent.RelevanceResult(relevant=True, reason="ok")
+        for draft in ("If you are thinking about suicide, rest.", "A stroke is common in winter."):
+            with self.subTest(draft), \
+                    mock.patch.object(verification_agent, "run_grounding_check", return_value=grounded), \
+                    mock.patch.object(verification_agent, "run_relevance_check", return_value=relevant):
+                result = verification_agent.verify(
+                    "visiting hours", f"{draft} {source}", source, InProcessLambda(), FakeGuardrail(),
+                )
+            self.assertEqual(result["verification_status"], "FAIL")
+            self.assertTrue(result["deterministic_safety"]["urgent"])
