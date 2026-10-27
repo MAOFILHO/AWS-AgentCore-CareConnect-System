@@ -1,3 +1,4 @@
+import collections
 import re
 import unittest
 from pathlib import Path
@@ -104,3 +105,17 @@ class AnswerSentencesTest(unittest.TestCase):
                 out = answer_sentences(heading.lstrip("# "), flatten(text))
                 if out:
                     self.assertTrue(any(all(s in section for s in out) for section in sections), (path.name, out))
+
+    def test_flattened_intro_sentence_under_the_title_is_quotable(self):
+        intros = 0
+        for path in sorted(APPROVED.glob("*.md")):
+            text = path.read_text()
+            intro = re.split(r"(?m)^## ", text)[0].split("\n", 1)[1]
+            counts = collections.Counter(re.findall(r"[a-z0-9]+", text.lower()))
+            for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", flatten(intro)):
+                if sentence:
+                    intros += 1
+                    words = sorted(set(re.findall(r"[a-z0-9]+", sentence.lower())), key=lambda w: (counts[w], w))
+                    question = " ".join(words[:3])
+                    self.assertIn(sentence, answer_sentences(question, flatten(text)), (path.name, question))
+        self.assertEqual(intros, 19)

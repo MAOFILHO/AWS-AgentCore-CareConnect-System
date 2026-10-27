@@ -7,6 +7,7 @@ STOPWORDS = {
     "a", "an", "and", "are", "at", "can", "do", "for", "how", "i", "in", "is", "it", "me", "my",
     "of", "on", "the", "to", "what", "when", "where", "which", "who", "why", "you", "your",
 }
+TITLE_LINE = re.compile(r"# .*?v\d{4}-\d{2}\)\s*")
 SUFFIXES = ("ing", "ers", "ors", "er", "or", "es", "ed", "s")
 
 
@@ -41,15 +42,19 @@ def _flat_sentences(text):
     """(section, sentence) pairs of a passage with no line breaks, split only on its "#" markers.
 
     No heading is guessed: a heading runs into its first sentence, so the whole section is the
-    context. The title section (from "# " to the first "## ") and a sentence that is only a heading
-    question are left out, and the leading "#" run of a quoted sentence is stripped.
+    context, except for the intro under the title, which has no section text and so counts a
+    sentence word once. The title line (the "# " text through its version tag) and a sentence that is only a
+    heading question are left out, and the leading "#" run of a quoted sentence is stripped.
     """
     for section in re.split(r"(?<!\S)(?=#{1,6} )", text):
         if re.match(r"# ", section):
-            continue
+            section = TITLE_LINE.sub("", section, count=1) if TITLE_LINE.match(section) else ""
+            context = ""
+        else:
+            context = section
         for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", section.strip()):
             if sentence and not (sentence.startswith("#") and sentence.endswith("?")):
-                yield section, re.sub(r"^#{1,6} ", "", sentence)
+                yield context, re.sub(r"^#{1,6} ", "", sentence)
 
 
 def answer_sentences(request, text):
@@ -68,7 +73,7 @@ def answer_sentences(request, text):
     for index, (heading, sentence) in enumerate(_flat_sentences(text) if flat else _sentences(text)):
         in_heading = wanted & _stems(heading)
         own = wanted & _stems(sentence)
-        matched = 2 * len(own) + len(in_heading) if flat else len(in_heading | own)
+        matched = (2 if heading else 1) * len(own) + len(in_heading) if flat else len(in_heading | own)
         if matched:
             scored.append((-matched, 0 if flat else -len(in_heading), index, sentence, heading))
     if flat and scored:
