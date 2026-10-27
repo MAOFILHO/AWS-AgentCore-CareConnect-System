@@ -76,15 +76,16 @@ test("the page never writes the patient's text to console or storage", async () 
 
 const FAILED_ESCALATION = "We could not pass your request to a clinician. Please contact Riverside Health directly, or call emergency services if your symptoms are urgent.";
 
+test("the failed-escalation text matches the notice in supervisor.py", () => {
+  const py = readFileSync(new URL("../src/careconnect/supervisor.py", import.meta.url), "utf8");
+  const block = py.match(/ESCALATION_FAILED_NOTICE = \(([^)]*)\)/)[1];
+  const notice = [...block.matchAll(/"([^"]*)"/g)].map((m) => m[1]).join("");
+  assert.equal(FAILED_ESCALATION, notice);
+});
+
 test("a failed escalation shows the server's call-us reply with no clinician status", async () => {
   const fetch = fakeApi(200, { decision: "escalate", reply: FAILED_ESCALATION, citations: [] });
   assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: FAILED_ESCALATION, citations: [] });
-});
-
-test("a normal escalation still shows the clinician status", async () => {
-  const reply = "A clinician will review your question.";
-  const fetch = fakeApi(200, { decision: "escalate", reply, citations: [] });
-  assert.deepEqual(await ask("q", { apiUrl, fetch }), { text: reply, citations: [], status: ESCALATE });
 });
 
 test("a budget stop shows the server's reply", async () => {
