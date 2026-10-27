@@ -472,49 +472,38 @@ class ForgedSourceGoldenTest(unittest.TestCase):
         self.assertEqual(out["citations"], ["s3://b/approved/v.md"])
 
 
+def verify_draft_on_lambda_path(draft):
+    spec = importlib.util.spec_from_file_location("safety_lambda", LAMBDA)
+    safety_lambda = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(safety_lambda)
+
+    class InProcessLambda:
+        def classify(self, text):
+            return safety_lambda.lambda_handler({"text": text}, None)
+
+    source = "s3://docs/approved/visiting-hours-and-policy.md"
+    grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
+    relevant = verification_agent.RelevanceResult(relevant=True, reason="ok")
+    with mock.patch.object(verification_agent, "run_grounding_check", return_value=grounded), \
+            mock.patch.object(verification_agent, "run_relevance_check", return_value=relevant):
+        return verification_agent.verify(
+            "visiting hours", f"{draft} {source}", source, InProcessLambda(), FakeGuardrail(),
+        )
+
+
 class MedicationAdviceDraftGoldenTest(unittest.TestCase):
     def test_draft_giving_medication_advice_fails_verification_on_the_lambda_path(self):
-        spec = importlib.util.spec_from_file_location("safety_lambda", LAMBDA)
-        safety_lambda = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(safety_lambda)
-
-        class InProcessLambda:
-            def classify(self, text):
-                return safety_lambda.lambda_handler({"text": text}, None)
-
-        source = "s3://docs/approved/visiting-hours-and-policy.md"
-        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
-        relevant = verification_agent.RelevanceResult(relevant=True, reason="ok")
         for draft in ("Increase your dose to 20mg.", "You can stop taking your tablets."):
-            with self.subTest(draft), \
-                    mock.patch.object(verification_agent, "run_grounding_check", return_value=grounded), \
-                    mock.patch.object(verification_agent, "run_relevance_check", return_value=relevant):
-                result = verification_agent.verify(
-                    "visiting hours", f"{draft} {source}", source, InProcessLambda(), FakeGuardrail(),
-                )
+            with self.subTest(draft):
+                result = verify_draft_on_lambda_path(draft)
             self.assertEqual(result["verification_status"], "FAIL")
             self.assertTrue(result["deterministic_safety"]["clinical"])
 
 
 class UrgentDraftGoldenTest(unittest.TestCase):
     def test_urgent_draft_fails_verification_on_the_lambda_path(self):
-        spec = importlib.util.spec_from_file_location("safety_lambda", LAMBDA)
-        safety_lambda = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(safety_lambda)
-
-        class InProcessLambda:
-            def classify(self, text):
-                return safety_lambda.lambda_handler({"text": text}, None)
-
-        source = "s3://docs/approved/visiting-hours-and-policy.md"
-        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
-        relevant = verification_agent.RelevanceResult(relevant=True, reason="ok")
         for draft in ("If you are thinking about suicide, rest.", "A stroke is common in winter."):
-            with self.subTest(draft), \
-                    mock.patch.object(verification_agent, "run_grounding_check", return_value=grounded), \
-                    mock.patch.object(verification_agent, "run_relevance_check", return_value=relevant):
-                result = verification_agent.verify(
-                    "visiting hours", f"{draft} {source}", source, InProcessLambda(), FakeGuardrail(),
-                )
+            with self.subTest(draft):
+                result = verify_draft_on_lambda_path(draft)
             self.assertEqual(result["verification_status"], "FAIL")
             self.assertTrue(result["deterministic_safety"]["urgent"])
