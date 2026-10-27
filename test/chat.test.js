@@ -288,3 +288,23 @@ test("a real API URL still calls fetch", async () => {
   await submit("one");
   assert.equal(calls, 1);
 });
+
+test("ask posts only the prompt as JSON", async () => {
+  let init;
+  const fetch = async (_u, i) => { init = i; return { ok: true, json: async () => ({ decision: "allow", reply: "ok", citations: [] }) }; };
+  await ask("Where do I park?", { apiUrl, fetch });
+  assert.equal(init.method, "POST");
+  assert.deepEqual(JSON.parse(init.body), { prompt: "Where do I park?" });
+});
+
+test("a Source mention inside the reply stays, only the trailing Source sentence goes", async () => {
+  const reply = "Source: the visiting policy says 9 to 5. Source: s3://b/approved/visiting-hours-and-policy.md";
+  const result = await ask("q", { apiUrl, fetch: fakeApi(200, { decision: "allow", reply, citations: [] }) });
+  assert.equal(result.text, "Source: the visiting policy says 9 to 5.");
+});
+
+test("a short ticket id is kept whole in the reference", async () => {
+  const reply = "Review needed. (Ticket: abc, status: pending_review)";
+  const result = await ask("q", { apiUrl, fetch: fakeApi(200, { decision: "escalate", reply, citations: [] }) });
+  assert.equal(result.text, "Review needed. (Reference: abc)");
+});
