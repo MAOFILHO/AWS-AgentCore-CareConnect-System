@@ -175,7 +175,7 @@ class DeployableSupervisorTest(unittest.TestCase):
         self.assertEqual(len(logs.output), 1)
         self.assertIn("outcome=task_failed", logs.output[0])
         self.assertIn(out["request_id"], logs.output[0])
-        self.assertNotIn("Metformin", logs.output[0])
+        self.assertNotIn("reschedule", logs.output[0])
         self.assertNotIn("secret placeholder", logs.output[0])
 
     def test_successful_unstaged_task_reply_still_reaches_verification(self):
