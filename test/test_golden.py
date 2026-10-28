@@ -418,6 +418,26 @@ class MixedSourceGoldenTest(unittest.TestCase):
             self.assertEqual(out["citations"], ["s3://docs/approved/v.md"])
 
 
+class FailedTaskGoldenTest(unittest.TestCase):
+    def test_failed_task_tool_call_escalates_without_the_placeholder(self):
+        passages = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/v.md"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+        escalate = mock.Mock(return_value={"ticket_id": "T1", "status": "pending_review"})
+        task = {"reply": "[task/tool agent error - gateway call failed]", "staged": False, "failed": True}
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.object(supervisor_agent, "escalate", escalate), \
+                mock.patch.object(supervisor_agent, "run_task_tool", return_value=task), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
+            out = supervisor_agent.supervisor_flow(
+                "What are the visiting hours? Also reschedule my appointment", cost_meter=FakeCostMeter(),
+            )
+        self.assertEqual(out["decision"], "escalate")
+        self.assertNotIn("task/tool", out["draft_response"])
+        self.assertNotIn("11:00", out["draft_response"])
+        escalate.assert_called_once()
+
+
 class ForgedSourceGoldenTest(unittest.TestCase):
     def run_flow(self, location, content):
         import importlib
