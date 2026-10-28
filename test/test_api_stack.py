@@ -15,7 +15,7 @@ FORBIDDEN = {"AWS::EC2::NatGateway", "AWS::OpenSearchService::Domain",
 # Types CloudFormation cannot tag; the stack-level tags cover them.
 UNTAGGABLE = {"AWS::Lambda::Permission", "AWS::S3::BucketPolicy",
               "AWS::CloudFront::OriginAccessControl", "AWS::ApiGatewayV2::Integration",
-              "AWS::ApiGatewayV2::Route"}
+              "AWS::ApiGatewayV2::Route", "AWS::CloudFront::ResponseHeadersPolicy"}
 
 
 def _loader():
