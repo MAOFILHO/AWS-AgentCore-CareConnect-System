@@ -50,6 +50,15 @@ class VerificationGateTest(unittest.TestCase):
     def test_phone_number_in_draft_shows_notice_only(self):
         self.assert_notice_only(self.flow({"a.md": "Visiting hours: call the ward on 555-123-4567."}))
 
+    def test_listed_hospital_number_in_draft_is_answered_with_a_citation(self):
+        out = self.flow({"a.md": "Visiting hours: call the ward on (555) 010-0160."})
+        self.assertEqual(out["decision"], "allow")
+        self.assertEqual(out["citations"], ["a.md"])
+        self.assertIn("(555) 010-0160", out["reply"])
+
+    def test_unlisted_number_next_to_a_listed_one_shows_notice_only(self):
+        self.assert_notice_only(self.flow({"a.md": "Visiting hours: (555) 010-0160 or (555) 010-9999."}))
+
     def test_mrn_in_draft_shows_notice_only(self):
         self.assert_notice_only(self.flow({"a.md": "Visiting hours for MRN-12345678."}))
 

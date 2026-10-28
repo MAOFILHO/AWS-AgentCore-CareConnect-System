@@ -51,6 +51,17 @@ class SupervisorFlowTest(unittest.TestCase):
             out = self.flow("visiting hours")
         self.assertEqual(out["reply"], "Call [PHONE] or [EMAIL], SSN [SSN], [MRN].")
 
+    def test_reply_keeps_a_listed_hospital_number_and_masks_an_unlisted_one(self):
+        reply = {
+            "request_id": "r1", "citations": [], "escalation": None, "decision": "allow",
+            "reply": "Billing office: (555) 010-0160. Other: (555) 010-9999.",
+        }
+        with mock.patch("careconnect.supervisor._flow", return_value=reply):
+            out = self.flow("billing phone")
+        self.assertIn("(555) 010-0160", out["reply"])
+        self.assertNotIn("010-9999", out["reply"])
+        self.assertIn("[PHONE]", out["reply"])
+
     def test_dose_question_escalates(self):
         out = self.flow("should I double my dose")
         self.assertEqual(out["decision"], "escalate")

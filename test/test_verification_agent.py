@@ -1,11 +1,21 @@
+import importlib.util
 import io
 import json
 import os
+import re
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from careconnect.agents import verification_agent as agent
 from careconnect.fakes import FakeGuardrail, FakeSafetyLambda
+from careconnect.safety_gate import PII_PATTERNS
+
+PHONE_PATTERN = PII_PATTERNS["phone"]
+SAFETY_LAMBDA = (
+    Path(__file__).resolve().parent.parent
+    / "Docs/Repo/lambda-functions/careconnect-deterministic-safety/lambda_function.py"
+)
 
 
 class VerificationInterfaceTest(unittest.TestCase):
@@ -108,6 +118,45 @@ class SafetyReplyFailsClosedTest(unittest.TestCase):
 
     def test_a_valid_reply_with_no_flags_passes(self):
         self.assertEqual(self.status({"classification": self.FULL})["verification_status"], "PASS")
+
+    def test_a_draft_with_only_a_listed_number_passes_the_lambda_and_the_guardrail(self):
+        for draft, expected in (
+            ("Billing office: (555) 010-0160.\nSource:\ns3://docs/approved/v.md", "PASS"),
+            ("Billing office: (555) 010-9999.\nSource:\ns3://docs/approved/v.md", "FAIL"),
+            ("Billing: (555) 010-0160 or (555) 010-9999.\nSource:\ns3://docs/approved/v.md", "FAIL"),
+        ):
+            with self.subTest(draft):
+                self.assertEqual(self.real_checks_status(draft), expected)
+
+    def real_checks_status(self, draft):
+        lambda_spec = importlib.util.spec_from_file_location("safety_lambda", SAFETY_LAMBDA)
+        safety_lambda = importlib.util.module_from_spec(lambda_spec)
+        lambda_spec.loader.exec_module(safety_lambda)
+
+        class RealSafety:
+            def classify(self, text):
+                return {"classification": safety_lambda.classify(text)}
+
+        client = mock.Mock()
+        client.apply_guardrail.side_effect = lambda **kw: {
+            "action": "GUARDRAIL_INTERVENED" if re.search(PHONE_PATTERN, kw["content"][0]["text"]["text"]) else "NONE"
+        }
+        env = {"CARECONNECT_GUARDRAIL_ID": "gid", "CARECONNECT_GUARDRAIL_VERSION": "3"}
+        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
+        relevant = agent.RelevanceResult(relevant=True, reason="ok")
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(agent, "run_grounding_check", return_value=grounded), \
+                mock.patch.object(agent, "run_relevance_check", return_value=relevant):
+            return agent.verify("billing phone", draft, draft, RealSafety(), agent.BedrockGuardrail(client))["verification_status"]
+
+    def test_the_guardrail_adapter_sends_the_word_number_in_place_of_a_listed_number(self):
+        client = mock.Mock()
+        client.apply_guardrail.return_value = {"action": "NONE"}
+        env = {"CARECONNECT_GUARDRAIL_ID": "gid", "CARECONNECT_GUARDRAIL_VERSION": "3"}
+        with mock.patch.dict(os.environ, env):
+            agent.BedrockGuardrail(client).apply("Billing: 555-010-0160. Other: 555-010-9999.")
+        sent = client.apply_guardrail.call_args.kwargs["content"][0]["text"]["text"]
+        self.assertEqual(sent, "Billing: number. Other: 555-010-9999.")
 
     def test_the_adapter_returns_an_empty_reply_on_function_error_or_bad_json(self):
         for response in (

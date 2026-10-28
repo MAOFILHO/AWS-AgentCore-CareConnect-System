@@ -1,8 +1,9 @@
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
-from careconnect.safety_gate import classify, mask_pii
+from careconnect.safety_gate import HOSPITAL_PHONES, classify, find_pii, mask_pii
 
 
 LAMBDA = (
@@ -118,6 +119,44 @@ class SafetyGateTest(unittest.TestCase):
     def test_masks_pii(self):
         text = "a@b.com 123-45-6789 MRN-12345678 555-123-4567"
         self.assertEqual(mask_pii(text), "[EMAIL] [SSN] [MRN] [PHONE]")
+
+
+DIRECTORY = (
+    Path(__file__).resolve().parent.parent
+    / "Docs/Repo/careconnect-approved-docs/approved/contact-directory.md"
+)
+
+
+class HospitalPhonesTest(unittest.TestCase):
+    COPIES = {
+        "src": (mask_pii, find_pii),
+        "lambda": (safety_lambda.mask_pii, safety_lambda.find_pii),
+    }
+
+    def test_a_listed_number_is_kept_and_not_flagged_by_both_copies(self):
+        for copy, (mask, find) in self.COPIES.items():
+            for text in ("Billing office: (555) 010-0160", "Call +1 555-010-0160 today", "555.010.0160"):
+                with self.subTest(copy=copy, text=text):
+                    self.assertEqual(mask(text), text)
+                    self.assertEqual(find(text), {})
+
+    def test_an_unlisted_number_is_still_masked_and_flagged_by_both_copies(self):
+        for copy, (mask, find) in self.COPIES.items():
+            with self.subTest(copy=copy):
+                masked = mask("Billing office: (555) 010-9999")
+                self.assertIn("[PHONE]", masked)
+                self.assertNotIn("9999", masked)
+                self.assertEqual(find("(555) 010-9999"), {"phone": 1})
+                self.assertEqual(find("(555) 010-0160 or (555) 010-9999"), {"phone": 1})
+
+    def test_both_sets_hold_exactly_the_numbers_in_the_contact_directory(self):
+        listed = {
+            re.sub(r"\D", "", number)
+            for number in re.findall(r"\(\d{3}\) \d{3}-\d{4}", DIRECTORY.read_text())
+        }
+        self.assertEqual(len(listed), 8)
+        self.assertEqual(HOSPITAL_PHONES, listed)
+        self.assertEqual(safety_lambda.HOSPITAL_PHONES, listed)
 
 
 class LambdaParityTest(unittest.TestCase):
