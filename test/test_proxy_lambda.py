@@ -138,13 +138,15 @@ class ProxyLambdaTest(unittest.TestCase):
         with mock.patch.object(proxy, "_client", return_value=client):
             out = proxy.lambda_handler(event(prompt="  " + "a" * 2000 + "  "), None)
         self.assertEqual(out["statusCode"], 200)
+        sent = json.loads(client.invoke_agent_runtime.call_args.kwargs["payload"])
+        self.assertEqual(sent, {"prompt": "a" * 2000})
 
     def test_rejected_prompt_log_holds_request_id_and_outcome_only(self):
         secret = "Quillfeather" * 200
         context = mock.Mock(aws_request_id="req-1")
-        with self.assertLogs("careconnect.proxy", level="DEBUG") as logs:
+        with self.assertLogs("careconnect.proxy", level="WARNING") as logs:
             proxy.lambda_handler(event(prompt=secret), context)
-        self.assertEqual(logs.output, ["INFO:careconnect.proxy:request_id=req-1 outcome=prompt_too_long"])
+        self.assertEqual(logs.output, ["WARNING:careconnect.proxy:request_id=req-1 outcome=prompt_too_long"])
 
 
 if __name__ == "__main__":

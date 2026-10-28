@@ -142,7 +142,7 @@ def lambda_handler(event, context):
     if len(prompt) > MAX_PROMPT_CHARS:
         request_id = getattr(context, "aws_request_id", None)
         outcome = "prompt_too_long"
-        log.info("request_id=%s outcome=%s", request_id, outcome)
+        log.warning("request_id=%s outcome=%s", request_id, outcome)
         return _reply(event, 400, {"error": "Prompt too long."})
 
     # Any failure returns a short fixed message: no trace, no diagnostics.
