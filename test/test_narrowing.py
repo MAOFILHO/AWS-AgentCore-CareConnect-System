@@ -58,6 +58,24 @@ class AnswerSentencesTest(unittest.TestCase):
         out = "\n".join(answer_sentences("What is the pharmacy phone number?", directory))
         self.assertRegex(out, r"\(555\) 010-\d{4}")
 
+    def test_phone_question_quotes_the_department_line_not_the_generic_intro(self):
+        directory = (APPROVED / "contact-directory.md").read_text()
+        body = directory.split("\n", 1)[1]
+        for text in (directory, body, flatten(directory), flatten(body)):
+            for request, number in (
+                ("What is the phone number for billing?", "(555) 010-0160"),
+                ("What is the phone number for the pharmacy?", "(555) 010-0140"),
+                ("What is the phone number for medical records?", "(555) 010-0180"),
+            ):
+                out = "\n".join(answer_sentences(request, text))
+                self.assertIn(number, out, request)
+
+    def test_statement_number_question_still_quotes_its_faq_line(self):
+        billing = (APPROVED / "billing-faq.md").read_text()
+        for text in (billing, flatten(billing)):
+            out = "\n".join(answer_sentences("Which statement number do I give the billing office?", text))
+            self.assertIn("contact the billing office with your statement number", out)
+
     def test_flattened_billing_question_quotes_the_billing_timing_sentence(self):
         billing = (APPROVED / "billing-faq.md").read_text()
         out = "\n".join(answer_sentences("When will I get my bill?", flatten(billing)))

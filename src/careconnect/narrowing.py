@@ -6,6 +6,7 @@ MAX_SENTENCES = 3
 STOPWORDS = {
     "a", "an", "and", "are", "at", "can", "do", "for", "how", "i", "in", "is", "it", "me", "my",
     "of", "on", "the", "to", "what", "when", "where", "which", "who", "why", "you", "your",
+    "call", "number", "phone",
 }
 TITLE_LINE = re.compile(r"# .*?v\d{4}-\d{2}\)\s*")
 SUFFIXES = ("ing", "ers", "ors", "er", "or", "es", "ed", "s")
@@ -18,8 +19,11 @@ def _stem(word):
     return word
 
 
+STOP_STEMS = {_stem(w) for w in STOPWORDS}
+
+
 def _stems(text):
-    return {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower())} - STOPWORDS
+    return {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower())} - STOP_STEMS
 
 
 def _sentences(text):
