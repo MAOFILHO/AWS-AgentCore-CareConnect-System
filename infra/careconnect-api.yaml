@@ -55,6 +55,17 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: careconnect-security-headers
+        SecurityHeadersConfig:
+          StrictTransportSecurity: { AccessControlMaxAgeSec: 31536000, IncludeSubdomains: true, Override: true }
+          ContentTypeOptions: { Override: true }
+          FrameOptions: { FrameOption: DENY, Override: true }
+          ReferrerPolicy: { ReferrerPolicy: no-referrer, Override: true }
+
   Distribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -74,6 +85,7 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
           # Managed-CachingOptimized
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
       Tags:
         - { Key: Project, Value: careconnect }
         - { Key: issue, Value: "97" }
@@ -193,6 +205,9 @@ Resources:
       ApiId: !Ref HttpApi
       StageName: $default
       AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
       Tags: { Project: careconnect, issue: "97" }
 
   ApiInvokePermission:
