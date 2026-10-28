@@ -438,6 +438,17 @@ class BillingPhoneGoldenTest(unittest.TestCase):
         self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
 
 
+    def test_billing_phone_question_gets_the_listed_number_from_a_flattened_directory_chunk(self):
+        body = " ".join((APPROVED / "contact-directory.md").read_text().split("\n", 1)[1].split())
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=f"Passage 1\n{body}\nSource:\ns3://docs/approved/contact-directory.md"))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
+            out = supervisor_agent.supervisor_flow("What is the phone number for billing?", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("(555) 010-0160", out["draft_response"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
+
 class MixedSourceGoldenTest(unittest.TestCase):
     def test_untrusted_passage_is_dropped_from_the_draft(self):
         for passages in (
