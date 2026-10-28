@@ -36,6 +36,8 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from careconnect.safety_gate import hide_hospital_phones
+
 # ---------------------------------------------------------------------------
 # Configuration. UPDATE REGION if you did not build in us-east-1.
 # ---------------------------------------------------------------------------
@@ -106,7 +108,7 @@ class BedrockGuardrail:
             guardrailIdentifier=guardrail_id,
             guardrailVersion=guardrail_version,
             source="OUTPUT",
-            content=[{"text": {"text": text}}],
+            content=[{"text": {"text": hide_hospital_phones(text)}}],
             outputScope="FULL",
         )
         return {

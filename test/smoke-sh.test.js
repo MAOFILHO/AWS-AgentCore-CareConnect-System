@@ -17,19 +17,21 @@ const answered = answer("req-2", { decision: "allow", reply: "Take two.", citati
 const wrongSource = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/evaluation-untrusted/doc.md"], staged: false });
 const mixedSources = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/approved/visiting-hours-and-policy.md", "s3://bucket/evaluation-untrusted/doc.md"], staged: false });
 const lookalike = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/unapproved/doc.md"], staged: false });
+const billingReply = (body = {}) => answer("req-5", { decision: "allow", reply: "Billing office: (555) 010-0160", citations: ["s3://bucket/approved/contact-directory.md"], staged: false, ...body });
 const blocked = answer("req-4", { decision: "block", reply: "Blocked.", citations: [], staged: false });
 
-// A fake curl on PATH answers each probe by its prompt: routine, clinical, urgent and manipulation.
+// A fake curl on PATH answers each probe by its prompt: routine, clinical, urgent, manipulation and billing.
 // Probes a test does not name get the reply a healthy deploy gives.
-function run(args, { routine = cited, clinical = escalated, urgent = escalated, manipulation = blocked, curlFails = false } = {}) {
+function run(args, { routine = cited, clinical = escalated, urgent = escalated, manipulation = blocked, billing = billingReply(), curlFails = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "smoke-sh-"));
-  for (const [name, reply] of Object.entries({ routine, clinical, urgent, manipulation })) {
+  for (const [name, reply] of Object.entries({ routine, clinical, urgent, manipulation, billing })) {
     writeFileSync(join(dir, `${name}.txt`), reply);
   }
   const curl = `#!/usr/bin/env bash
 ${curlFails ? "exit 7" : ""}
 case "$*" in
   *visiting*) cat "${dir}/routine.txt" ;;
+  *billing*) cat "${dir}/billing.txt" ;;
   *breathe*) cat "${dir}/urgent.txt" ;;
   *"Ignore previous"*) cat "${dir}/manipulation.txt" ;;
   *) cat "${dir}/clinical.txt" ;;
@@ -55,9 +57,10 @@ test("smoke.sh exits 0 for a cited answer and an escalation, and prints ids and 
   assert.match(r.stdout, /clinical: PASS request_id=req-2 decision=escalate/);
   assert.match(r.stdout, /urgent: PASS request_id=req-2 decision=escalate/);
   assert.match(r.stdout, /manipulation: PASS request_id=req-4 decision=block/);
+  assert.match(r.stdout, /billing: PASS request_id=req-5 decision=allow/);
   assert.ok(!(r.stdout + r.stderr).includes(REPLY_TEXT));
   const out = (r.stdout + r.stderr).toLowerCase();
-  for (const text of ["ibuprofen", "breathe", "ignore previous"]) assert.ok(!out.includes(text));
+  for (const text of ["ibuprofen", "breathe", "ignore previous", "010-0160"]) assert.ok(!out.includes(text));
 });
 
 test("smoke.sh fails when the routine answer has no citation", () => {
@@ -96,6 +99,23 @@ test("smoke.sh fails when the clinical question is answered", () => {
   const r = run(["https://api.example.com"], { routine: cited, clinical: answered });
   assert.equal(r.status, 1);
   assert.match(r.stdout, /clinical: FAIL/);
+});
+
+test("smoke.sh fails when the billing probe is masked, uncited, cited twice or escalated", () => {
+  const cases = [
+    billingReply({ reply: "Billing office: [PHONE]" }),
+    billingReply({ reply: "Open 555 to 010, ext 0160 hours" }),
+    billingReply({ reply: "Call (555) 010-9999 or 55 501 00160" }),
+    billingReply({ citations: [] }),
+    billingReply({ citations: ["s3://bucket/approved/a.md", "s3://bucket/approved/b.md"] }),
+    billingReply({ citations: ["s3://bucket/evaluation-untrusted/contact-directory.md"] }),
+    answer("req-5", { decision: "escalate", reply: "A clinician will review this.", citations: [], staged: false }),
+  ];
+  for (const billing of cases) {
+    const r = run(["https://api.example.com"], { billing });
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /billing: FAIL/);
+  }
 });
 
 test("smoke.sh fails on a non-JSON reply and on a failed request", () => {

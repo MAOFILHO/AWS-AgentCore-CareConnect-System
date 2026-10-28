@@ -104,6 +104,19 @@ PII_PATTERNS = {
     "phone": r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b",
 }
 
+# The hospital numbers printed in approved/contact-directory.md, digits only.
+# They are allowed in replies; every other phone number is masked and flagged.
+HOSPITAL_PHONES = frozenset({
+    "5550100100", "5550100120", "5550100140", "5550100160",
+    "5550100161", "5550100180", "5550100190", "5550100111",
+})
+
+
+# A listed hospital phone number is not personal data.
+def _is_allowed(pii_type, value):
+    return pii_type == "phone" and re.sub(r"\D", "", value)[-10:] in HOSPITAL_PHONES
+
+
 # Lines inside a RETRIEVED document that look like injected instructions and
 # should be stripped out before the document is used.
 INSTRUCTION_LINE_PATTERNS = [
@@ -128,7 +141,7 @@ def matches(text, patterns):
 def find_pii(text):
     findings = {}
     for pii_type, pattern in PII_PATTERNS.items():
-        values = re.findall(pattern, text, re.IGNORECASE)
+        values = [v for v in re.findall(pattern, text, re.IGNORECASE) if not _is_allowed(pii_type, v)]
         if values:
             findings[pii_type] = len(values)
     return findings
@@ -144,7 +157,12 @@ def mask_pii(text):
         "phone": "[PHONE]",
     }
     for pii_type, pattern in PII_PATTERNS.items():
-        masked = re.sub(pattern, replacements[pii_type], masked, flags=re.IGNORECASE)
+        masked = re.sub(
+            pattern,
+            lambda m, t=pii_type: m.group() if _is_allowed(t, m.group()) else replacements[t],
+            masked,
+            flags=re.IGNORECASE,
+        )
     return masked
 
 
