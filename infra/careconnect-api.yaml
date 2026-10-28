@@ -193,6 +193,9 @@ Resources:
       ApiId: !Ref HttpApi
       StageName: $default
       AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
       Tags: { Project: careconnect, issue: "97" }
 
   ApiInvokePermission:
