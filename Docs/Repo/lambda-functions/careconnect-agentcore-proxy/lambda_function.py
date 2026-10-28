@@ -36,16 +36,22 @@ AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN", "REPLACE_ME_WITH_YOUR_AG
 # >>> CHANGE #2: region (leave as-is if your agent is in us-east-1).
 AWS_REGION = "us-east-1"
 
+# Longest prompt, in characters, the proxy forwards to the agent.
+MAX_PROMPT_CHARS = 2000
+
 # >>> CHANGE #3: your CloudFront domain, e.g. "https://dxxxx.cloudfront.net".
 #     Only this origin gets a CORS allowance. Never use "*".
 #     infra/careconnect-api.yaml sets it to the CloudFront domain through the environment.
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "REPLACE_ME_WITH_YOUR_WEBSITE_ORIGIN")
 
 import json
+import logging
 import re
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictStr
 from typing import Literal
+
+log = logging.getLogger("careconnect.proxy")
 
 
 # Same contract as careconnect.api_reply.ApiReply (this Lambda deploys alone).
@@ -132,6 +138,12 @@ def lambda_handler(event, context):
 
     if not prompt:
         return _reply(event, 400, {"error": "Missing 'prompt'."})
+
+    if len(prompt) > MAX_PROMPT_CHARS:
+        request_id = getattr(context, "aws_request_id", None)
+        outcome = "prompt_too_long"
+        log.info("request_id=%s outcome=%s", request_id, outcome)
+        return _reply(event, 400, {"error": "Prompt too long."})
 
     # Any failure returns a short fixed message: no trace, no diagnostics.
     try:

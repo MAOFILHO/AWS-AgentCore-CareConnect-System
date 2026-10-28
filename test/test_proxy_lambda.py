@@ -115,6 +115,36 @@ class ProxyLambdaTest(unittest.TestCase):
     def test_missing_prompt_is_400(self):
         out = proxy.lambda_handler(event(prompt="  "), None)
         self.assertEqual(out["statusCode"], 400)
+        self.assertEqual(json.loads(out["body"]), {"error": "Missing 'prompt'."})
+
+    def test_prompt_at_limit_is_forwarded(self):
+        client = mock.Mock(wraps=ReplyClient(json.dumps({"decision": "allow", "reply": "ok", "citations": []})))
+        with mock.patch.object(proxy, "_client", return_value=client):
+            out = proxy.lambda_handler(event(prompt="a" * proxy.MAX_PROMPT_CHARS), None)
+        self.assertEqual(out["statusCode"], 200)
+        client.invoke_agent_runtime.assert_called_once()
+
+    def test_prompt_over_limit_is_400_and_agent_not_called(self):
+        self.assertEqual(proxy.MAX_PROMPT_CHARS, 2000)
+        client = mock.Mock()
+        with mock.patch.object(proxy, "_client", return_value=client):
+            out = proxy.lambda_handler(event(prompt="a" * 2001), None)
+        self.assertEqual(out["statusCode"], 400)
+        self.assertEqual(json.loads(out["body"]), {"error": "Prompt too long."})
+        client.invoke_agent_runtime.assert_not_called()
+
+    def test_whitespace_around_prompt_does_not_count(self):
+        client = mock.Mock(wraps=ReplyClient(json.dumps({"decision": "allow", "reply": "ok", "citations": []})))
+        with mock.patch.object(proxy, "_client", return_value=client):
+            out = proxy.lambda_handler(event(prompt="  " + "a" * 2000 + "  "), None)
+        self.assertEqual(out["statusCode"], 200)
+
+    def test_rejected_prompt_log_holds_request_id_and_outcome_only(self):
+        secret = "Quillfeather" * 200
+        context = mock.Mock(aws_request_id="req-1")
+        with self.assertLogs("careconnect.proxy", level="DEBUG") as logs:
+            proxy.lambda_handler(event(prompt=secret), context)
+        self.assertEqual(logs.output, ["INFO:careconnect.proxy:request_id=req-1 outcome=prompt_too_long"])
 
 
 if __name__ == "__main__":
