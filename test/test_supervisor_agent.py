@@ -18,6 +18,7 @@ def approved_passage(name):
 
 
 MIXED = "What are the visiting hours? Also reschedule my appointment"
+BILLING_FIRST = "Passage 1\n" + approved_passage("billing-faq.md") + "\nPassage 2\n" + approved_passage("contact-directory.md")
 PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
 
 
@@ -53,6 +54,23 @@ class DeployableSupervisorTest(unittest.TestCase):
                 os.chmod(tmp, 0o755)
         self.assertEqual(out["decision"], "allow")
         self.assertEqual(out["citations"], ["s3://docs/approved/visiting.md"])
+
+    def test_phone_question_drafts_from_the_directory_passage_ranked_second(self):
+        out = self.api("What is the phone number for billing?", passages=BILLING_FIRST)
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("(555) 010-0160", out["reply"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
+
+    def test_non_phone_question_keeps_the_first_approved_passage(self):
+        out = self.api("How do I dispute a bill?", passages=BILLING_FIRST)
+        self.assertEqual(out["citations"], ["s3://docs/approved/billing-faq.md"])
+
+    def test_phone_question_without_a_directory_passage_keeps_the_first_passage_and_fails_closed(self):
+        out = self.api(
+            "What is the phone number for billing?", status="FAIL", passages=approved_passage("billing-faq.md")
+        )
+        self.assertIn("billing office with your statement number", self.verify.call_args.args[2])
+        self.assertEqual((out["decision"], out["citations"]), ("escalate", []))
 
     def test_consecutive_flows_verify_their_own_evidence(self):
         other = "Parking is free.\nSource:\ns3://docs/approved/parking.md"

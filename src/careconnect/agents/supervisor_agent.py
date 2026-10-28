@@ -44,7 +44,9 @@ from careconnect.budget import (
 )
 from careconnect.gateway import StagedRefillToolReply
 from careconnect.narrowing import answer_sentences
-from careconnect.safety_gate import classify, is_health_request, mask_pii, sanitize_retrieved
+from careconnect.safety_gate import (
+    PII_PATTERNS, classify, is_health_request, is_hospital_phone, mask_pii, sanitize_retrieved,
+)
 from careconnect.supervisor import ESCALATION_FAILED_NOTICE, ESCALATION_NOTICE, REFILL_REQUEST
 from careconnect.supervisor_model import load_supervisor_model
 
@@ -52,6 +54,8 @@ BLOCK_NOTICE = "I can't help with that request."
 STAGED_NOTICE = "Your refill is staged and awaits human approval. It has not been submitted."
 OTHER_REQUEST_NOTICE = "Please ask separately about your other request."
 UNANSWERED_NOTICE = "I ran out of time to answer your other question; please ask it again."
+PHONE_ASK = re.compile(r"\b(phone|call|number)\b")
+DEPARTMENT = re.compile(r"\b(billing|pharmacy|scheduling|appointments?|records|reception|switchboard|portal|relations)\b")
 log = logging.getLogger(__name__)
 
 
@@ -114,13 +118,20 @@ def run_retrieval(request, state):
         return {"answer": "[retrieval skipped: CARECONNECT_KB_ID not set]", "passages": ""}
     from careconnect.agents.retrieval_agent import search_docs
     all_passages = sanitize_retrieved(search_docs(request))
-    # Keep only the single top-ranked passage. Semantic search returns several
-    # loosely-related chunks; extra ones (e.g. triage/dosage text) can trip the
-    # guardrail even for a simple question. Verifying against the best-matching
-    # passage keeps the draft grounded AND clear of unrelated safety triggers.
+    # Keep one passage. Semantic search returns several loosely-related chunks; extra ones
+    # (e.g. triage/dosage text) can trip the guardrail even for a simple question. Verifying
+    # against one passage keeps the draft grounded AND clear of unrelated safety triggers.
     # Passages whose Source is not under approved/ are dropped before the draft.
-    top = next((p.strip() for p in split_passages(all_passages) if approved_sources(p)), "")
+    # That passage is the first approved one, unless the request asks for a department's phone
+    # number: then it is the first whose narrowed sentences hold a listed hospital number.
+    approved = [p.strip() for p in split_passages(all_passages) if approved_sources(p)]
+    wants_phone = PHONE_ASK.search(request.lower()) and DEPARTMENT.search(request.lower())
+    top = next((p for p in approved if wants_phone and holds_listed_phone(request, p)), approved[0] if approved else "")
     return {"answer": top, "passages": top}
+
+
+def holds_listed_phone(request, passage):
+    return any(is_hospital_phone(m.group()) for m in re.finditer(PII_PATTERNS["phone"], narrowed_passage(request, passage)))
 
 
 def split_passages(text):

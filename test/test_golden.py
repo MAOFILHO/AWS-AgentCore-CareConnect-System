@@ -421,6 +421,23 @@ class PiiInReplyGoldenTest(unittest.TestCase):
         self.assertNotIn("555-123-4567", out["draft_response"])
 
 
+class BillingPhoneGoldenTest(unittest.TestCase):
+    def test_billing_phone_question_gets_the_listed_number_when_the_faq_ranks_first(self):
+        faq, directory = (
+            (APPROVED / name).read_text() + "\nSource:\ns3://docs/approved/" + name
+            for name in ("billing-faq.md", "contact-directory.md")
+        )
+        passages = f"Passage 1\n{faq}\nPassage 2\n{directory}"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
+            out = supervisor_agent.supervisor_flow("What is the phone number for billing?", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("(555) 010-0160", out["draft_response"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
+
+
 class MixedSourceGoldenTest(unittest.TestCase):
     def test_untrusted_passage_is_dropped_from_the_draft(self):
         for passages in (
