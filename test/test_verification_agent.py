@@ -18,7 +18,7 @@ class VerificationInterfaceTest(unittest.TestCase):
     def test_checks_use_the_injected_fakes(self):
         self.assertEqual(
             agent.run_deterministic_safety("x", FakeSafetyLambda({"urgent": True})),
-            {"classification": {"urgent": True}},
+            {"classification": {"clinical": False, "urgent": True, "injection": False, "pii": {}}},
         )
         self.assertEqual(agent.run_guardrail("x", FakeGuardrail())["action"], "NONE")
         self.assertNotEqual(agent.run_guardrail("x", FakeGuardrail(allow=False))["action"], "NONE")
@@ -77,6 +77,47 @@ class RelevanceCheckTest(unittest.TestCase):
                     "visiting hours", draft, draft, FakeSafetyLambda(), FakeGuardrail()
                 )["verification_status"]
         self.assertEqual(verdicts, {True: "PASS", False: "FAIL"})
+
+
+class SafetyReplyFailsClosedTest(unittest.TestCase):
+    DRAFT = "Visiting is 11:00-20:00.\nSource:\ns3://docs/approved/v.md"
+    FULL = {"clinical": False, "urgent": False, "injection": False, "pii": {}}
+
+    class Reply:
+        def __init__(self, reply):
+            self.reply = reply
+
+        def classify(self, text):
+            return self.reply
+
+    def status(self, reply):
+        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
+        relevant = agent.RelevanceResult(relevant=True, reason="ok")
+        with mock.patch.object(agent, "run_grounding_check", return_value=grounded), \
+                mock.patch.object(agent, "run_relevance_check", return_value=relevant):
+            return agent.verify("visiting hours", self.DRAFT, self.DRAFT, self.Reply(reply), FakeGuardrail())
+
+    def test_an_error_payload_fails(self):
+        self.assertEqual(self.status({"errorMessage": "boom"})["verification_status"], "FAIL")
+
+    def test_a_reply_missing_any_flag_fails(self):
+        for flag in self.FULL:
+            with self.subTest(flag):
+                partial = {k: v for k, v in self.FULL.items() if k != flag}
+                self.assertEqual(self.status({"classification": partial})["verification_status"], "FAIL")
+
+    def test_a_valid_reply_with_no_flags_passes(self):
+        self.assertEqual(self.status({"classification": self.FULL})["verification_status"], "PASS")
+
+    def test_the_adapter_returns_an_empty_reply_on_function_error_or_bad_json(self):
+        for response in (
+            {"FunctionError": "Unhandled", "Payload": io.BytesIO(b'{"errorMessage": "boom"}')},
+            {"Payload": io.BytesIO(b"not json")},
+        ):
+            with self.subTest(response):
+                client = mock.Mock()
+                client.invoke.return_value = response
+                self.assertEqual(agent.LambdaSafety(client).classify("hi"), {})
 
 
 if __name__ == "__main__":
