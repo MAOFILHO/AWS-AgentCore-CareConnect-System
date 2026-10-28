@@ -159,11 +159,11 @@ def refill_was_staged(messages):
 
 
 def run_task_tool(request, state):
-    """Returns {"reply": text, "staged": True only when the Gateway staged a refill}."""
+    """Returns {"reply": text, "staged": True only when the Gateway staged a refill, "failed": True when there is no real reply}."""
     state.step("Task/Tool Agent (AgentCore Gateway / MCP)")
     # >>> LEARNERS: export CARECONNECT_GATEWAY_URL="<your-gateway-mcp-url>"
     if not os.environ.get("CARECONNECT_GATEWAY_URL"):
-        return {"reply": "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]", "staged": False}
+        return {"reply": "[task/tool skipped: CARECONNECT_GATEWAY_URL not set]", "staged": False, "failed": True}
     model = load_supervisor_model()  # a config error must not read as a gateway error
     try:
         from careconnect.agents.task_tool_agent import SYSTEM_PROMPT, get_mcp_client
@@ -172,9 +172,9 @@ def run_task_tool(request, state):
             tools = mcp_client.list_tools_sync()
             agent = Agent(system_prompt=SYSTEM_PROMPT, tools=tools, model=model)
             reply = str(agent(request))
-            return {"reply": reply, "staged": refill_was_staged(agent.messages)}
+            return {"reply": reply, "staged": refill_was_staged(agent.messages), "failed": False}
     except Exception:
-        return {"reply": "[task/tool agent error - gateway call failed]", "staged": False}
+        return {"reply": "[task/tool agent error - gateway call failed]", "staged": False, "failed": True}
 
 
 def run_escalation(request, state):
@@ -286,6 +286,9 @@ def _supervisor_flow(request, *, cost_meter=None, budgets=None, clock=None):
         plan = create_plan(request, safety, state)
         outcome["plan"] = plan
         results = execute_required_agents(request, plan, state)
+        if results.get("task", {}).get("failed"):  # a placeholder is never a reply
+            log.warning("request_id=%s safety_gate=allow outcome=task_failed", request_id)
+            return {**outcome, "decision": "escalate", "draft_response": escalation_notice(request)}
         draft, evidence = combine_safe_results(request, results, safety, state)
         if safety["clinical_detected"]:
             return {**outcome, "decision": "escalate", "draft_response": draft}

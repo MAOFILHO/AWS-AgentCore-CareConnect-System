@@ -17,6 +17,7 @@ def approved_passage(name):
     return (APPROVED / name).read_text() + "\nSource:\ns3://docs/approved/" + name
 
 
+MIXED = "What are the visiting hours? Also reschedule my appointment"
 PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
 
 
@@ -145,6 +146,45 @@ class DeployableSupervisorTest(unittest.TestCase):
                 out = self.flow(text)
             run.assert_called_once()
             self.assertTrue(out["staged"])
+
+    def assert_failed_task_escalates(self, out):
+        self.assertEqual(out["decision"], "escalate")
+        self.assertEqual(out["draft_response"], ESCALATION_NOTICE)
+        self.assertNotIn("task/tool", out["draft_response"])
+        self.escalate.assert_called_once()
+
+    def test_gateway_call_that_raises_escalates_without_the_placeholder(self):
+        task_tool = mock.Mock(get_mcp_client=mock.Mock(side_effect=RuntimeError("boom")))
+        with mock.patch.dict("os.environ", {"CARECONNECT_GATEWAY_URL": "https://gw"}), \
+                mock.patch.object(supervisor_agent, "load_supervisor_model"), \
+                mock.patch.dict(sys.modules, {"careconnect.agents.task_tool_agent": task_tool, "strands": mock.Mock()}):
+            out = self.flow(MIXED)
+        self.assert_failed_task_escalates(out)
+
+    def test_unset_gateway_url_escalates_without_the_placeholder(self):
+        with mock.patch.dict("os.environ"):
+            os.environ.pop("CARECONNECT_GATEWAY_URL", None)
+            out = self.flow(MIXED)
+        self.assert_failed_task_escalates(out)
+
+    def test_failed_task_logs_request_id_and_outcome_only(self):
+        task = {"reply": "[secret placeholder]", "staged": False, "failed": True}
+        with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task), \
+                self.assertLogs(supervisor_agent.log, "WARNING") as logs:
+            out = self.flow(MIXED)
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn("outcome=task_failed", logs.output[0])
+        self.assertIn(out["request_id"], logs.output[0])
+        self.assertNotIn("reschedule", logs.output[0])
+        self.assertNotIn("secret placeholder", logs.output[0])
+
+    def test_successful_unstaged_task_reply_still_reaches_verification(self):
+        task = {"reply": "Your clinic opens at nine.", "staged": False, "failed": False}
+        with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
+            out = self.flow(MIXED)
+        self.assertIn("Operational status:\nYour clinic opens at nine.", out["draft_response"])
+        self.verify.assert_called_once()
+        self.assertEqual(out["decision"], "allow")
 
     def test_refill_questions_stay_on_retrieval(self):
         with mock.patch.object(supervisor_agent, "run_task_tool") as run:
