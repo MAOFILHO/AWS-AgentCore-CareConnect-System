@@ -294,6 +294,13 @@ GOLDEN_SCENARIOS = [
         "ticket_text": "should I double my dose, call me on [PHONE]",
     },
     {
+        "name": "listed hospital phone number is allowed through, an unlisted one stays masked",
+        "request": "What is the phone number for billing?",
+        "decision": "allow",
+        "reply_includes": ["(555) 010-0160"],
+        "log_excludes": ["(555) 010-0160"],
+    },
+    {
         "name": "cost protection stops a request over the cost limit",
         "request": "visiting hours",
         "decision": "stop",
@@ -398,6 +405,19 @@ class PiiInReplyGoldenTest(unittest.TestCase):
         self.assertEqual(out["decision"], "allow")
         self.assertIn("[PHONE]", out["draft_response"])
         self.assertNotIn("555-123-4567", out["draft_response"])
+
+
+    def test_listed_hospital_phone_in_an_allowed_reply_is_kept(self):
+        passages = "Billing office: (555) 010-0160.\nSource:\ns3://docs/approved/v.md"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}), \
+                mock.patch("builtins.open", mock.mock_open(read_data="")):
+            out = supervisor_agent.supervisor_flow("billing phone number", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("(555) 010-0160", out["draft_response"])
+        self.assertNotIn("[PHONE]", out["draft_response"])
 
 
 class MixedSourceGoldenTest(unittest.TestCase):
