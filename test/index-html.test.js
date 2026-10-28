@@ -19,3 +19,11 @@ test("index.html uses a multi-line textarea for the question", () => {
   assert.ok(Number(tag[0].match(/\brows="(\d+)"/)?.[1]) >= 4, "rows >= 4");
   assert.doesNotMatch(html, /<input\b[^>]*id="question"/);
 });
+
+test("index.html names the reply region and does not make it an alert", () => {
+  const html = readFileSync(new URL("../src/frontend/index.html", import.meta.url), "utf8");
+  const tag = html.match(/<div\b[^>]*id="reply"[^>]*>/);
+  assert.ok(tag, "reply region present");
+  assert.match(tag[0], /\baria-label="[^"]+"/);
+  assert.doesNotMatch(tag[0], /role="alert"/);
+});

@@ -17,6 +17,9 @@ function el() {
   Object.defineProperty(e, "textContent", { get: () => text, set: (v) => { text = v; if (v === "") e.children = []; } });
   e.appendChild = (c) => { e.children.push(c); };
   e.addEventListener = (n, f) => { e.listeners[n] = f; };
+  e.attrs = {};
+  e.setAttribute = (n, v) => { e.attrs[n] = v; };
+  e.removeAttribute = (n) => { delete e.attrs[n]; };
   return e;
 }
 
@@ -307,4 +310,53 @@ test("a short ticket id is kept whole in the reference", async () => {
   const reply = "Review needed. (Ticket: abc, status: pending_review)";
   const result = await ask("q", { apiUrl, fetch: fakeApi(200, { decision: "escalate", reply, citations: [] }) });
   assert.equal(result.text, "Review needed. (Reference: abc)");
+});
+
+test("the escalation-failed and error notices render with role=alert", () => {
+  for (const text of [ERROR_NOTICE, FAILED_ESCALATION]) {
+    const box = el();
+    show({ createElement: el }, box, { text, citations: [] });
+    assert.equal(box.children.at(-1).attrs.role, "alert");
+  }
+});
+
+test("a normal reply, a block and the waiting text have no role=alert", () => {
+  for (const result of [
+    { text: "Park in lot B.", citations: [] },
+    { text: "r", citations: [], status: STOPPED },
+    { text: WAITING_NOTICE, citations: [] },
+  ]) {
+    const box = el();
+    show({ createElement: el }, box, result);
+    for (const child of box.children) assert.equal(child.attrs.role, undefined);
+    assert.equal(box.attrs.role, undefined);
+  }
+});
+
+test("the reply region is busy while a request is pending and not after", async () => {
+  let release;
+  const { box, submit } = chatPage(() => new Promise((r) => { release = r; }));
+  const first = submit("one");
+  assert.equal(box.attrs["aria-busy"], "true");
+  release({ ok: true, json: async () => ({ decision: "allow", reply: "the answer", citations: [] }) });
+  await first;
+  assert.equal(box.attrs["aria-busy"], undefined);
+});
+
+test("the reply region is not busy after a failed request", async () => {
+  const { box, submit } = chatPage(fakeApi(500, {}));
+  await submit("one");
+  assert.equal(box.attrs["aria-busy"], undefined);
+});
+
+test("the reply region is no longer busy when the final reply or notice is rendered", async () => {
+  for (const fetch of [fakeApi(500, {}), fakeApi(200, { decision: "allow", reply: "the answer", citations: [] })]) {
+    const { box, submit } = chatPage(fetch);
+    const busyAtRender = [];
+    const append = box.appendChild;
+    box.appendChild = (c) => { busyAtRender.push(box.attrs["aria-busy"]); append(c); };
+    await submit("one");
+    assert.ok(busyAtRender.length > 1);
+    assert.deepEqual(busyAtRender.slice(1), busyAtRender.slice(1).map(() => undefined));
+  }
 });
