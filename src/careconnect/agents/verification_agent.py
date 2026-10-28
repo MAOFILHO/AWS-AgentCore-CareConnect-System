@@ -85,7 +85,14 @@ class LambdaSafety:
             InvocationType="RequestResponse",
             Payload=json.dumps({"text": text}).encode("utf-8"),
         )
-        return json.loads(response["Payload"].read())
+        payload = response["Payload"].read()
+        if response.get("FunctionError"):
+            return {}
+        try:
+            reply = json.loads(payload)
+        except ValueError:
+            return {}
+        return reply if isinstance(reply, dict) else {}
 
 
 class BedrockGuardrail:
@@ -128,6 +135,17 @@ class GroundingResult(BaseModel):
     reason: str = Field(
         description="Short explanation of the verification result."
     )
+
+
+class SafetyVerdict(BaseModel):
+    clinical: bool
+    urgent: bool
+    injection: bool
+    pii: dict
+
+
+class SafetyReply(BaseModel):
+    classification: SafetyVerdict
 
 
 class RelevanceResult(BaseModel):
@@ -249,11 +267,10 @@ def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardr
     grounding_result = run_grounding_check(answer, evidence)
     relevance_result = run_relevance_check(request, answer)
 
-    classification = deterministic_result.get("classification", {})
-    clinical_detected = classification.get("clinical", False)
-    urgent_detected = classification.get("urgent", False)
-    injection_detected = classification.get("injection", False)
-    pii_detected = bool(classification.get("pii", {}))
+    try:
+        verdict = SafetyReply.model_validate_json(json.dumps(deterministic_result)).classification
+    except ValueError:
+        verdict = None
     guardrail_passed = guardrail_result["action"] == "NONE"
 
     # PASS only if EVERY condition below is satisfied.
@@ -263,10 +280,11 @@ def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardr
             citation_result["citation_valid"],
             grounding_result.grounded,
             relevance_result.relevant,
-            not clinical_detected,
-            not urgent_detected,
-            not injection_detected,
-            not pii_detected,
+            verdict is not None,
+            verdict is not None and not verdict.clinical,
+            verdict is not None and not verdict.urgent,
+            verdict is not None and not verdict.injection,
+            verdict is not None and not verdict.pii,
             guardrail_passed,
         ]
     )
@@ -280,12 +298,9 @@ def verify(request, answer, evidence, safety: SafetyLambda | None = None, guardr
             "reason": grounding_result.reason,
         },
         "relevance_check": relevance_result.model_dump(),
-        "deterministic_safety": {
-            "clinical": clinical_detected,
-            "urgent": urgent_detected,
-            "injection": injection_detected,
-            "pii": classification.get("pii", {}),
-        },
+        "deterministic_safety": (
+            verdict.model_dump() if verdict else {"error": "unparseable safety reply"}
+        ),
         "guardrail": guardrail_result,
     }
 

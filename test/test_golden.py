@@ -507,3 +507,20 @@ class UrgentDraftGoldenTest(unittest.TestCase):
                 result = verify_draft_on_lambda_path(draft)
             self.assertEqual(result["verification_status"], "FAIL")
             self.assertTrue(result["deterministic_safety"]["urgent"])
+
+
+class MalformedSafetyReplyGoldenTest(unittest.TestCase):
+    def test_malformed_safety_lambda_reply_fails_verification(self):
+        class BrokenLambda:
+            def classify(self, text):
+                return {"errorMessage": "boom"}
+
+        source = "s3://docs/approved/visiting-hours-and-policy.md"
+        grounded = mock.Mock(grounded=True, unsupported_claims=[], reason="ok")
+        relevant = verification_agent.RelevanceResult(relevant=True, reason="ok")
+        with mock.patch.object(verification_agent, "run_grounding_check", return_value=grounded), \
+                mock.patch.object(verification_agent, "run_relevance_check", return_value=relevant):
+            result = verification_agent.verify(
+                "visiting hours", f"Visiting is 11:00-20:00. {source}", source, BrokenLambda(), FakeGuardrail(),
+            )
+        self.assertEqual(result["verification_status"], "FAIL")

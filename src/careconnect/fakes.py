@@ -101,7 +101,7 @@ class FakeGuardrail:
 
 class FakeSafetyLambda:
     def __init__(self, classification=None):
-        self.classification = classification or {}
+        self.classification = {"clinical": False, "urgent": False, "injection": False, "pii": {}, **(classification or {})}
 
     def classify(self, text):
         return {"classification": self.classification}
