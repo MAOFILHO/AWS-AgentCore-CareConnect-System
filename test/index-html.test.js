@@ -27,3 +27,9 @@ test("index.html names the reply region and does not make it an alert", () => {
   assert.match(tag[0], /\baria-label="[^"]+"/);
   assert.doesNotMatch(tag[0], /role="alert"/);
 });
+
+test("index.html caps the question at 2000 characters", () => {
+  const html = readFileSync(new URL("../src/frontend/index.html", import.meta.url), "utf8");
+  const tag = html.match(/<textarea\b[^>]*>/);
+  assert.match(tag[0], /\bmaxlength="2000"/);
+});
