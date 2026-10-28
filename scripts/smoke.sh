@@ -28,7 +28,7 @@ check() {
     return 1
   }
   printf '%s' "$raw" | python3 -I -c '
-import json, sys
+import json, re, sys
 label, expected = sys.argv[1:3]
 head, _, body = sys.stdin.read().replace("\r\n", "\n").partition("\n\n")
 lines = head.split("\n")
@@ -45,7 +45,7 @@ try:
         decision = reply["decision"]
     cites = reply.get("citations")
     cited = isinstance(cites, list) and bool(cites) and all(isinstance(c, str) and "/approved/" in c for c in cites)
-    has_number = isinstance(reply.get("reply"), str) and "5550100160" in "".join(ch for ch in reply["reply"] if ch.isdigit())
+    has_number = isinstance(reply.get("reply"), str) and re.search(r"\(?555\)?[-.\s]010[-.\s]0160\b", reply["reply"]) is not None
     single = cited and len(cites) == 1
 except (ValueError, AttributeError):
     pass

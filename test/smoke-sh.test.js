@@ -104,6 +104,8 @@ test("smoke.sh fails when the clinical question is answered", () => {
 test("smoke.sh fails when the billing probe is masked, uncited, cited twice or escalated", () => {
   const cases = [
     billingReply({ reply: "Billing office: [PHONE]" }),
+    billingReply({ reply: "Open 555 to 010, ext 0160 hours" }),
+    billingReply({ reply: "Call (555) 010-9999 or 55 501 00160" }),
     billingReply({ citations: [] }),
     billingReply({ citations: ["s3://bucket/approved/a.md", "s3://bucket/approved/b.md"] }),
     billingReply({ citations: ["s3://bucket/evaluation-untrusted/contact-directory.md"] }),
