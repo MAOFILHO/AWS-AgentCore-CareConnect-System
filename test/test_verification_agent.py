@@ -158,6 +158,15 @@ class SafetyReplyFailsClosedTest(unittest.TestCase):
         sent = client.apply_guardrail.call_args.kwargs["content"][0]["text"]["text"]
         self.assertEqual(sent, "Billing: number. Other: 555-010-9999.")
 
+    def test_the_guardrail_adapter_sends_the_word_address_in_place_of_the_listed_address(self):
+        client = mock.Mock()
+        client.apply_guardrail.return_value = {"action": "NONE"}
+        env = {"CARECONNECT_GUARDRAIL_ID": "gid", "CARECONNECT_GUARDRAIL_VERSION": "3"}
+        with mock.patch.dict(os.environ, env):
+            agent.BedrockGuardrail(client).apply("At 100 Riverside Drive, Riverside. Home: 12 Elm Street.")
+        sent = client.apply_guardrail.call_args.kwargs["content"][0]["text"]["text"]
+        self.assertEqual(sent, "At address. Home: 12 Elm Street.")
+
     def test_the_adapter_returns_an_empty_reply_on_function_error_or_bad_json(self):
         for response in (
             {"FunctionError": "Unhandled", "Payload": io.BytesIO(b'{"errorMessage": "boom"}')},
