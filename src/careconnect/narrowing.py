@@ -1,12 +1,13 @@
 """Narrow an approved passage to the sentences that answer the request."""
 
 import re
+import unicodedata
 
 MAX_SENTENCES = 3
 STOPWORDS = {
     "a", "an", "and", "are", "at", "can", "do", "for", "how", "i", "in", "is", "it", "me", "my",
     "of", "on", "the", "to", "what", "when", "where", "which", "who", "why", "you", "your",
-    "call", "number", "phone",
+    "call", "number", "phone", "there",
 }
 TITLE_LINE = re.compile(r"# .*?v\d{4}-\d{2}\)\s*")
 SUFFIXES = ("ing", "ers", "ors", "er", "or", "es", "ed", "s")
@@ -23,7 +24,8 @@ STOP_STEMS = {_stem(w) for w in STOPWORDS}
 
 
 def _stems(text):
-    return {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower())} - STOP_STEMS
+    plain = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    return {_stem(w) for w in re.findall(r"[a-z0-9]+", plain)} - STOP_STEMS
 
 
 def _sentences(text):

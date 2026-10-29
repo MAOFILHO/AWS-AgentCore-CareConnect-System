@@ -8,6 +8,9 @@ For any life-threatening emergency, call your local emergency number (for exampl
 ## Emergency Department
 The Riverside Health Emergency Department is open 24 hours a day, every day, at the main hospital site. It is for serious and life-threatening conditions.
 
+## Emergency Department waiting time: what is the current waiting time
+The Emergency Department does not publish a live waiting time. Patients are seen in order of medical need, not arrival, so waits vary through the day. For the latest information, call main reception at (555) 010-0100, open 24 hours. In a life-threatening emergency, call 911 and do not wait.
+
 ## Urgent care
 Urgent care is for problems that are not life-threatening but need attention the same day (for example, minor injuries or mild illnesses). Urgent care hours and locations are listed on the Riverside Health website and in the Contact Directory.
 
