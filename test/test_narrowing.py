@@ -28,6 +28,8 @@ class AnswerSentencesTest(unittest.TestCase):
             ("Does the hospital has or offer free wifi for patients?", FACILITIES, "Free visitor Wi-Fi"),
             ("Is there a cafe in the hospital?", FACILITIES, "café"),
             ("What's the current waiting time for the emergency?", emergency, "does not publish a live waiting time"),
+            ("How do I pay my bill?", (APPROVED / "billing-faq.md").read_text(), "Pay online through the portal"),
+            ("How can I pay my hospital bill?", (APPROVED / "billing-faq.md").read_text(), "Pay online through the portal"),
         ]
         for question, text, expected in cases:
             with self.subTest(question=question):
