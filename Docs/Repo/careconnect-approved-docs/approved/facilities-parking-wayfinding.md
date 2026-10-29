@@ -3,6 +3,9 @@
 ## Parking
 Visitor and patient parking is available in the multi-storey car park next to the main entrance. Accessible (disabled) parking bays are near each entrance. Bring your parking ticket for validation where offered.
 
+## Parking fees
+Parking is free for the first 2 hours. After 2 hours the fee is $3 per hour, up to $15 per day. Validate your parking ticket at reception to receive the free period.
+
 ## Drop-off
 There is a short-stay drop-off zone outside the main entrance for setting down and picking up patients. Please do not leave vehicles unattended there.
 
