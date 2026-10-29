@@ -160,6 +160,16 @@ scripts/teardown.sh
 
 Run `agentcore destroy` too: the AgentCore runtime is not a stack. `scripts/destroy-data-stack.sh <stack-name>` empties the approved-documents bucket before it deletes the data stack.
 
+## Patient Chat Page (live screenshots)
+
+Captured from the deployed staging site. The left column is a routine question answered with a citation. The right column is a clinical question escalated to a clinician, with a ticket reference.
+
+| Routine question, light | Clinical question, light |
+|---|---|
+| ![Cited answer, light theme](images/chat-answer-light.png) | ![Escalation callout, light theme](images/chat-escalation-light.png) |
+| **Routine question, dark** | **Clinical question, dark** |
+| ![Cited answer, dark theme](images/chat-answer-dark.png) | ![Escalation callout, dark theme](images/chat-escalation-dark.png) |
+
 ## Project Structure
 
 ```
