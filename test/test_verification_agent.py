@@ -167,6 +167,16 @@ class SafetyReplyFailsClosedTest(unittest.TestCase):
         sent = client.apply_guardrail.call_args.kwargs["content"][0]["text"]["text"]
         self.assertEqual(sent, "At address. Home: 12 Elm Street.")
 
+    def test_the_guardrail_adapter_leaves_the_source_file_name_out(self):
+        client = mock.Mock()
+        client.apply_guardrail.return_value = {"action": "NONE"}
+        env = {"CARECONNECT_GUARDRAIL_ID": "gid", "CARECONNECT_GUARDRAIL_VERSION": "3"}
+        draft = "Approved Riverside Health information:\nA fact.\nSource:\ns3://bucket/approved/emergency-and-urgent-care-info.md"
+        with mock.patch.dict(os.environ, env):
+            agent.BedrockGuardrail(client).apply(draft)
+        sent = client.apply_guardrail.call_args.kwargs["content"][0]["text"]["text"]
+        self.assertEqual(sent, "Approved Riverside Health information:\nA fact.")
+
     def test_the_adapter_returns_an_empty_reply_on_function_error_or_bad_json(self):
         for response in (
             {"FunctionError": "Unhandled", "Payload": io.BytesIO(b'{"errorMessage": "boom"}')},
