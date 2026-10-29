@@ -61,16 +61,7 @@ def _flat_sentences(text):
                 yield context, re.sub(r"^#{1,6} ", "", sentence)
 
 
-def answer_sentences(request, text):
-    """Up to MAX_SENTENCES verbatim sentences that share a word with the request, in document order.
-
-    A request word may match the sentence or its section heading, so "maternity" finds the
-    sentences under "Maternity and birthing". Ties go to the heading match, then to the
-    earlier sentence. A passage with no line breaks has no heading line, so a word of the
-    sentence counts three times and a word of the rest of its section counts once, and the sentences
-    come only from the section that holds the best-scoring one. An empty list
-    means nothing answers the request.
-    """
+def _best_entries(request, text):
     wanted = _stems(request)
     flat = _is_flat(text)
     scored = []
@@ -83,5 +74,23 @@ def answer_sentences(request, text):
     if flat and scored:
         top_section = min(scored)[4]
         scored = [entry for entry in scored if entry[4] == top_section]
-    best = sorted(scored)[:MAX_SENTENCES]
+    return sorted(scored)[:MAX_SENTENCES]
+
+
+def answer_sentences(request, text):
+    """Up to MAX_SENTENCES verbatim sentences that share a word with the request, in document order.
+
+    A request word may match the sentence or its section heading, so "maternity" finds the
+    sentences under "Maternity and birthing". Ties go to the heading match, then to the
+    earlier sentence. A passage with no line breaks has no heading line, so a word of the
+    sentence counts three times and a word of the rest of its section counts once, and the sentences
+    come only from the section that holds the best-scoring one. An empty list
+    means nothing answers the request.
+    """
+    best = _best_entries(request, text)
     return [entry[3] for entry in sorted(best, key=lambda entry: entry[2])]
+
+
+def answer_score(request, text):
+    """How strongly the sentences answer_sentences keeps match the request; 0 when none do."""
+    return -sum(entry[0] for entry in _best_entries(request, text))

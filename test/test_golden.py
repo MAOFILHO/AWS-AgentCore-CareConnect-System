@@ -403,6 +403,23 @@ class UncitedAnswerGoldenTest(unittest.TestCase):
         escalate.assert_called_once()
 
 
+class RefillProcessGoldenTest(unittest.TestCase):
+    def test_refill_process_question_is_answered_with_one_refill_policy_citation(self):
+        def passage(name):
+            return (APPROVED / name).read_text() + "\nSource:\ns3://docs/approved/" + name
+
+        passages = "Passage 1\n" + passage("pharmacy-services.md") + "\nPassage 2\n" + passage("pharmacy-refill-policy.md")
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=passages))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
+            out = supervisor_agent.api_result(
+                supervisor_agent.supervisor_flow("How do I refill a prescription?", cost_meter=FakeCostMeter())
+            )
+        self.assertEqual(out["decision"], "allow")
+        self.assertEqual(out["citations"], ["s3://docs/approved/pharmacy-refill-policy.md"])
+
+
 class PiiInReplyGoldenTest(unittest.TestCase):
     def test_phone_in_an_allowed_reply_is_masked(self):
         passages = "Call the ward on 555-123-4567.\nSource:\ns3://docs/approved/v.md"

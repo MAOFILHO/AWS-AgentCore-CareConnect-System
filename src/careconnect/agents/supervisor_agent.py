@@ -43,7 +43,7 @@ from careconnect.budget import (
     BUDGET_MESSAGE, BudgetExceeded, BudgetTracker, StepPriceMeter, load_budgets,
 )
 from careconnect.gateway import StagedRefillToolReply
-from careconnect.narrowing import answer_sentences
+from careconnect.narrowing import answer_score, answer_sentences
 from careconnect.safety_gate import (
     PII_PATTERNS, classify, is_health_request, is_hospital_phone, mask_pii, sanitize_retrieved,
 )
@@ -124,16 +124,23 @@ def run_retrieval(request, state):
     # (e.g. triage/dosage text) can trip the guardrail even for a simple question. Verifying
     # against one passage keeps the draft grounded AND clear of unrelated safety triggers.
     # Passages whose Source is not under approved/ are dropped before the draft.
-    # That passage is the first approved one, unless the request asks for a department's phone
-    # number: then it is the first whose narrowed sentences hold a listed hospital number.
+    # That passage is the approved one whose narrowed sentences match the request best (the first
+    # on a tie), unless the request asks for a department's phone number: then it is the first
+    # whose narrowed sentences hold a listed hospital number.
     approved = [p.strip() for p in split_passages(all_passages) if approved_sources(p)]
     wants_phone = PHONE_ASK.search(request.lower()) and DEPARTMENT.search(request.lower())
-    top = next((p for p in approved if wants_phone and holds_listed_phone(request, p)), approved[0] if approved else "")
+    best = max(approved, key=lambda p: passage_score(request, p), default="")
+    top = next((p for p in approved if wants_phone and holds_listed_phone(request, p)), best)
     return {"answer": top, "passages": top}
 
 
 def holds_listed_phone(request, passage):
     return any(is_hospital_phone(m.group()) for m in re.finditer(PII_PATTERNS["phone"], narrowed_passage(request, passage)))
+
+
+def passage_score(request, passage):
+    match = re.search(r"(?s)\A(.*?)^Source:[ \t]*\n", passage, flags=re.MULTILINE)
+    return answer_score(request, match.group(1)) if match else 0
 
 
 def split_passages(text):

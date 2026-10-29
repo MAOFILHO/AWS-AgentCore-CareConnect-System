@@ -150,7 +150,7 @@ After a deploy, run the smoke test against the API URL:
 scripts/smoke.sh <api-url>
 ```
 
-It asks 5 fixed questions: a routine one gets a cited answer, the billing phone question gets the listed number, the clinical and urgent-only questions escalate, and a manipulation attempt is not allowed. It prints the request ID and decision for each, never the message or the reply.
+It asks 6 fixed questions: a routine one and a refill-process one get a cited answer, the billing phone question gets the listed number, the clinical and urgent-only questions escalate, and a manipulation attempt is not allowed. It prints the request ID and decision for each, never the message or the reply.
 
 ## Teardown
 

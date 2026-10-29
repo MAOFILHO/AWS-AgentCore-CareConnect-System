@@ -18,19 +18,21 @@ const wrongSource = answer("req-1", { decision: "allow", reply: REPLY_TEXT, cita
 const mixedSources = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/approved/visiting-hours-and-policy.md", "s3://bucket/evaluation-untrusted/doc.md"], staged: false });
 const lookalike = answer("req-1", { decision: "allow", reply: REPLY_TEXT, citations: ["s3://bucket/unapproved/doc.md"], staged: false });
 const billingReply = (body = {}) => answer("req-5", { decision: "allow", reply: "Billing office: (555) 010-0160", citations: ["s3://bucket/approved/contact-directory.md"], staged: false, ...body });
+const refillReply = (body = {}) => answer("req-6", { decision: "allow", reply: "You may request a refill.", citations: ["s3://bucket/approved/pharmacy-refill-policy.md"], staged: false, ...body });
 const blocked = answer("req-4", { decision: "block", reply: "Blocked.", citations: [], staged: false });
 
-// A fake curl on PATH answers each probe by its prompt: routine, clinical, urgent, manipulation and billing.
+// A fake curl on PATH answers each probe by its prompt: routine, clinical, urgent, manipulation, billing and refill.
 // Probes a test does not name get the reply a healthy deploy gives.
-function run(args, { routine = cited, clinical = escalated, urgent = escalated, manipulation = blocked, billing = billingReply(), curlFails = false } = {}) {
+function run(args, { routine = cited, clinical = escalated, urgent = escalated, manipulation = blocked, billing = billingReply(), refill = refillReply(), curlFails = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "smoke-sh-"));
-  for (const [name, reply] of Object.entries({ routine, clinical, urgent, manipulation, billing })) {
+  for (const [name, reply] of Object.entries({ routine, clinical, urgent, manipulation, billing, refill })) {
     writeFileSync(join(dir, `${name}.txt`), reply);
   }
   const curl = `#!/usr/bin/env bash
 ${curlFails ? "exit 7" : ""}
 case "$*" in
   *visiting*) cat "${dir}/routine.txt" ;;
+  *refill*) cat "${dir}/refill.txt" ;;
   *billing*) cat "${dir}/billing.txt" ;;
   *breathe*) cat "${dir}/urgent.txt" ;;
   *"Ignore previous"*) cat "${dir}/manipulation.txt" ;;
@@ -58,6 +60,7 @@ test("smoke.sh exits 0 for a cited answer and an escalation, and prints ids and 
   assert.match(r.stdout, /urgent: PASS request_id=req-2 decision=escalate/);
   assert.match(r.stdout, /manipulation: PASS request_id=req-4 decision=block/);
   assert.match(r.stdout, /billing: PASS request_id=req-5 decision=allow/);
+  assert.match(r.stdout, /refill: PASS request_id=req-6 decision=allow/);
   assert.ok(!(r.stdout + r.stderr).includes(REPLY_TEXT));
   const out = (r.stdout + r.stderr).toLowerCase();
   for (const text of ["ibuprofen", "breathe", "ignore previous", "010-0160"]) assert.ok(!out.includes(text));
@@ -115,6 +118,19 @@ test("smoke.sh fails when the billing probe is masked, uncited, cited twice or e
     const r = run(["https://api.example.com"], { billing });
     assert.equal(r.status, 1);
     assert.match(r.stdout, /billing: FAIL/);
+  }
+});
+
+test("smoke.sh fails when the refill probe escalates or has no approved citation", () => {
+  const cases = [
+    answer("req-6", { decision: "escalate", reply: "A clinician will review this.", citations: [], staged: false }),
+    refillReply({ citations: [] }),
+    refillReply({ citations: ["s3://bucket/evaluation-untrusted/pharmacy-refill-policy.md"] }),
+  ];
+  for (const refill of cases) {
+    const r = run(["https://api.example.com"], { refill });
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /refill: FAIL/);
   }
 });
 

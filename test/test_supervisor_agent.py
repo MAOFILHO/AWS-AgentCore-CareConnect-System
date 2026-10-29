@@ -19,6 +19,19 @@ def approved_passage(name):
 
 MIXED = "What are the visiting hours? Also reschedule my appointment"
 BILLING_FIRST = "Passage 1\n" + approved_passage("billing-faq.md") + "\nPassage 2\n" + approved_passage("contact-directory.md")
+REFILL_SECOND = (
+    "Passage 1\n" + approved_passage("pharmacy-services.md")
+    + "\nPassage 2\n" + approved_passage("pharmacy-refill-policy.md")
+)
+
+
+def flat_passage(name):
+    return " ".join((APPROVED / name).read_text().split()) + "\nSource:\ns3://docs/approved/" + name
+
+
+REFILL_SECOND_FLAT = (
+    "Passage 1\n" + flat_passage("pharmacy-services.md") + "\nPassage 2\n" + flat_passage("pharmacy-refill-policy.md")
+)
 PASSAGES = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/approved/visiting.md"
 
 
@@ -71,6 +84,25 @@ class DeployableSupervisorTest(unittest.TestCase):
         )
         self.assertIn("billing office with your statement number", self.verify.call_args.args[2])
         self.assertEqual((out["decision"], out["citations"]), ("escalate", []))
+
+    def test_refill_question_drafts_from_the_refill_policy_ranked_second(self):
+        for passages in (REFILL_SECOND, REFILL_SECOND_FLAT):
+            out = self.api("How do I refill a prescription?", passages=passages)
+            self.assertEqual(out["decision"], "allow")
+            self.assertEqual(out["citations"], ["s3://docs/approved/pharmacy-refill-policy.md"])
+            self.assertIn("refills remaining", out["reply"])
+
+    def test_clinical_dose_question_still_escalates_with_the_refill_passages(self):
+        out = self.api("What dose of ibuprofen should I take?", passages=REFILL_SECOND)
+        self.assertEqual((out["decision"], out["citations"]), ("escalate", []))
+        self.verify.assert_not_called()
+
+    def test_refill_my_medicine_still_stages_and_is_never_submitted(self):
+        task = {"reply": "free text", "staged": True}
+        with mock.patch.object(supervisor_agent, "run_task_tool", return_value=task):
+            out = self.api("Refill my metformin", passages=REFILL_SECOND)
+        self.assertEqual((out["decision"], out["staged"]), ("allow", True))
+        self.assertIn("has not been submitted", out["reply"])
 
     def test_consecutive_flows_verify_their_own_evidence(self):
         other = "Parking is free.\nSource:\ns3://docs/approved/parking.md"
