@@ -4,7 +4,7 @@ The phone numbers below are examples for this training project. Always use the c
 
 ## Main hospital
 - Main reception / switchboard: (555) 010-0100 — open 24 hours
-- Address: Riverside Health, Main Hospital Site
+- Address: Riverside Health, Main Hospital Site, 100 Riverside Drive, Riverside (an example address for this training project)
 
 ## Appointments and scheduling
 - Scheduling desk: (555) 010-0120 — weekdays 08:00–18:00

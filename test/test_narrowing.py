@@ -21,6 +21,27 @@ class AnswerSentencesTest(unittest.TestCase):
         self.assertNotIn("prayer", out)
         self.assertNotIn("Wi-Fi", out)
 
+    def test_simple_questions_find_their_sentence_in_the_approved_doc(self):
+        emergency = (APPROVED / "emergency-and-urgent-care-info.md").read_text()
+        cases = [
+            ("What's the hospital full address?", FACILITIES, "100 Riverside Drive"),
+            ("Does the hospital has or offer free wifi for patients?", FACILITIES, "Free visitor Wi-Fi"),
+            ("Is there a cafe in the hospital?", FACILITIES, "café"),
+            ("What's the current waiting time for the emergency?", emergency, "does not publish a live waiting time"),
+            ("How do I pay my bill?", (APPROVED / "billing-faq.md").read_text(), "Pay online through the portal"),
+            ("How can I pay my hospital bill?", (APPROVED / "billing-faq.md").read_text(), "Pay online through the portal"),
+        ]
+        for question, text, expected in cases:
+            with self.subTest(question=question):
+                self.assertIn(expected, "\n".join(answer_sentences(question, text)))
+
+    def test_waiting_time_answer_has_no_wording_the_guardrail_reads_as_triage(self):
+        emergency = (APPROVED / "emergency-and-urgent-care-info.md").read_text()
+        out = "\n".join(answer_sentences("What's the current waiting time for the emergency?", emergency))
+        self.assertIn("call main reception", out)
+        self.assertNotIn("medical need", out)
+        self.assertNotIn("911", out)
+
     def test_maternity_question_keeps_the_birth_partner_sentence(self):
         out = "\n".join(answer_sentences("What are the visiting rules for maternity?", VISITING))
         self.assertIn("birth partner", out)

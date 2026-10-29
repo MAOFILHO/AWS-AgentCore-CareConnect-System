@@ -3,7 +3,7 @@ import re
 import unittest
 from pathlib import Path
 
-from careconnect.safety_gate import HOSPITAL_PHONES, classify, find_pii, mask_pii
+from careconnect.safety_gate import HOSPITAL_ADDRESS, HOSPITAL_PHONES, classify, find_pii, mask_pii
 
 
 LAMBDA = (
@@ -157,6 +157,11 @@ class HospitalPhonesTest(unittest.TestCase):
         self.assertEqual(len(listed), 8)
         self.assertEqual(HOSPITAL_PHONES, listed)
         self.assertEqual(safety_lambda.HOSPITAL_PHONES, listed)
+
+
+class HospitalAddressTest(unittest.TestCase):
+    def test_the_listed_address_is_the_one_in_the_contact_directory(self):
+        self.assertIn(HOSPITAL_ADDRESS, DIRECTORY.read_text())
 
 
 class LambdaParityTest(unittest.TestCase):

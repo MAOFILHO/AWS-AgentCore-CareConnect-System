@@ -111,6 +111,15 @@ def hide_hospital_phones(text):
     )
 
 
+# The hospital address printed in approved/contact-directory.md. It is allowed in replies.
+HOSPITAL_ADDRESS = "100 Riverside Drive, Riverside"
+
+
+# Replace the listed address with the word "address" so the Guardrail only sees other addresses.
+def hide_hospital_address(text):
+    return text.replace(HOSPITAL_ADDRESS, "address")
+
+
 # Lines inside a RETRIEVED document that look like injected instructions and
 # should be stripped out before the document is used.
 INSTRUCTION_LINE_PATTERNS = [
