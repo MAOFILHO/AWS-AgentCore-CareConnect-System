@@ -448,6 +448,17 @@ class BillingPhoneGoldenTest(unittest.TestCase):
         self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
 
 
+    def test_hospital_address_question_gets_the_listed_address(self):
+        directory = (APPROVED / "contact-directory.md").read_text() + "\nSource:\ns3://docs/approved/contact-directory.md"
+        retrieval = mock.Mock(search_docs=mock.Mock(return_value=f"Passage 1\n{directory}"))
+        with mock.patch.object(supervisor_agent, "verify", return_value={"verification_status": "PASS"}), \
+                mock.patch.dict("sys.modules", {"careconnect.agents.retrieval_agent": retrieval}), \
+                mock.patch.dict("os.environ", {"CARECONNECT_KB_ID": "kb"}):
+            out = supervisor_agent.supervisor_flow("What's the hospital full address?", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("100 Riverside Drive, Riverside", out["draft_response"])
+        self.assertEqual(out["citations"], ["s3://docs/approved/contact-directory.md"])
+
     def test_billing_phone_question_gets_the_listed_number_from_a_flattened_directory_chunk(self):
         body = " ".join((APPROVED / "contact-directory.md").read_text().split("\n", 1)[1].split())
         retrieval = mock.Mock(search_docs=mock.Mock(return_value=f"Passage 1\n{body}\nSource:\ns3://docs/approved/contact-directory.md"))
