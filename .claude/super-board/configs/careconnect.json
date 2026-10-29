@@ -26,7 +26,7 @@
   "usage_pause_pct": 95,
   "usage_fallback": "none",
   "verify_commands": [
-    "(npm ci || npm install) && python3 -m pip install -q -r requirements.txt && npm test && PYTHONPATH=src python3 -m unittest discover -s test"
+    "V=${TMPDIR:-/tmp}/sb-verify-venv && python3 -m venv $V && . $V/bin/activate && (npm ci || npm install) && python3 -m pip install -q -r requirements.txt && npm test && PYTHONPATH=src python3 -m unittest discover -s test"
   ],
   "max_workers": 3,
   "rebuild_cap": 3,
