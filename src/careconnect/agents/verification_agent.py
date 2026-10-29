@@ -97,6 +97,9 @@ class LambdaSafety:
         return reply if isinstance(reply, dict) else {}
 
 
+SOURCE_BLOCK = re.compile(r"\n?Source:[ \t]*\n\S+")
+
+
 class BedrockGuardrail:
     def __init__(self, client=None):
         self.client = client
@@ -108,7 +111,7 @@ class BedrockGuardrail:
             guardrailIdentifier=guardrail_id,
             guardrailVersion=guardrail_version,
             source="OUTPUT",
-            content=[{"text": {"text": hide_hospital_address(hide_hospital_phones(text))}}],
+            content=[{"text": {"text": hide_hospital_address(hide_hospital_phones(SOURCE_BLOCK.sub("", text)))}}],
             outputScope="FULL",
         )
         return {
