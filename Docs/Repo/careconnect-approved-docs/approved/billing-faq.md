@@ -6,7 +6,7 @@ You will receive an itemised statement within 14 days of your visit, listing ser
 ## Why might I get more than one bill?
 You may receive separate bills from the facility and from individual providers (for example, a radiologist or anaesthetist). Each covers a different part of your care.
 
-## How can I pay?
+## How can I pay my bill?
 Pay online through the portal, by phone, or by mail. Have your statement or account number ready.
 
 ## Payment plans
