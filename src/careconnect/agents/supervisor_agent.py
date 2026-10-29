@@ -52,6 +52,7 @@ from careconnect.supervisor_model import load_supervisor_model
 
 BLOCK_NOTICE = "I can't help with that request."
 STAGED_NOTICE = "Your refill is staged and awaits human approval. It has not been submitted."
+EMERGENCY_NOTICE = "For a life-threatening emergency, call your local emergency number or go to the nearest Emergency Department."
 OTHER_REQUEST_NOTICE = "Please ask separately about your other request."
 UNANSWERED_NOTICE = "I ran out of time to answer your other question; please ask it again."
 PHONE_ASK = re.compile(r"\b(phone|call|number)\b")
@@ -71,6 +72,7 @@ def check_safety(request, state):
     )
     return {
         "clinical_detected": escalate_request,
+        "urgent": bool(gate["urgent"]),
         "blocked": bool(gate["injection"]) and not escalate_request,
     }
 
@@ -240,10 +242,11 @@ def combine_safe_results(request, results, safety, state):
         esc = results["escalation"]
         # Never surface a clinical answer - only the escalation notice.
         parts.append(
-            "Medication question:\n"
-            "Your medication question requires review by a licensed "
+            "Clinician follow-up:\n"
+            "Your request requires review by a licensed "
             f"clinician. (Ticket: {esc.get('ticket_id', 'n/a')}, "
             f"status: {esc.get('status', 'pending_review')})"
+            + (f" {EMERGENCY_NOTICE}" if safety["urgent"] else "")
         )
     elif safety["clinical_detected"]:
         parts.append(ESCALATION_NOTICE)

@@ -237,6 +237,26 @@ class DeployableSupervisorTest(unittest.TestCase):
         self.assertIn("licensed clinician", out["draft_response"])
         self.assertNotIn("11:00", out["draft_response"])
 
+    def test_urgent_request_escalates_with_emergency_guidance_and_no_medication_label(self):
+        out = self.flow("I can't breathe")
+        self.assertEqual(out["decision"], "escalate")
+        self.assertIn(supervisor_agent.EMERGENCY_NOTICE, out["draft_response"])
+        self.assertIn("T1", out["draft_response"])
+        self.assertNotIn("medication", out["draft_response"].lower())
+
+    def test_dose_question_escalates_with_neutral_label_and_no_emergency_guidance(self):
+        out = self.flow("What dose of ibuprofen should I take?")
+        self.assertEqual(out["decision"], "escalate")
+        self.assertIn("Clinician follow-up:", out["draft_response"])
+        self.assertNotIn(supervisor_agent.EMERGENCY_NOTICE, out["draft_response"])
+        self.assertNotIn("medication", out["draft_response"].lower())
+
+    def test_health_wording_escalates_with_neutral_label(self):
+        out = self.flow("I feel dizzy")
+        self.assertEqual(out["decision"], "escalate")
+        self.assertIn("Clinician follow-up:", out["draft_response"])
+        self.assertNotIn(supervisor_agent.EMERGENCY_NOTICE, out["draft_response"])
+
     def test_medication_question_escalates(self):
         out = self.flow("Should I stop my medication before my procedure?")
         self.escalate.assert_called_once()
