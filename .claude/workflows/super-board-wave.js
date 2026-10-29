@@ -16,7 +16,7 @@ export const meta = {
 //   cards: [{ number, status, title, lane, labels }],  // output of super-board-wave-plan.sh
 //     lane: 'build' | 'qa' | 'review' — a Ready card labelled `qa` has lane 'qa'
 //     and skips the Builder; every other Ready card is built first (v3.0.0).
-//   tier: 'low' | 'medium' | 'high' (optional, default 'medium'),  // run model ladder
+//   tier: ignored; models are pinned per lane in LANE_MODEL,
 // }
 // The harness can deliver `args` as a JSON-encoded string (the tool param is
 // untyped) — normalize before validating.
@@ -52,6 +52,8 @@ const READ_SHAPES = [
   `- issue state: --kind state -- issue view <N> --json state --jq .state`,
   // Wave 13 halted on --json comments,reviewThreads: reviewThreads is not a gh pr view field.
   `- PR comments+reviews: --kind json -- pr view <N> --json comments,reviews (gh pr view has no reviewThreads field)`,
+  // Wave 19 halted: gh rejects --slurp combined with --jq.
+  `- Count inline PR notes: --kind json -- api repos/MAOFILHO/AWS-AgentCore-CareConnect-System/pulls/<N>/comments --paginate --jq '.[].path' (never combine --slurp with --jq; gh rejects it and three failures halt the run)`,
   // PR #126 hit the 400-line gate at 600 lines because QA evidence logs rode along (code was 368).
   `Keep QA evidence logs out of the PR diff: write them outside the branch or summarize in a PR comment. The merge gate counts every changed line against the 400 cap.`,
   `A read whose output misses its shape exits 64 for that call only and prints the valid form: fix the read, do not halt.`,
@@ -149,6 +151,7 @@ const lanePrompt = (lane, card) => [
   `create your own worktree under .claude/worktrees/, work on the issue branch, post the required PR/issue comments,`,
   `move the project card yourself, clean up the worktree on exit. Config: ${input.configPath}.`,
   BOARD_IO(),
+  `Use the mattpocock-skills first where they fit: tdd and diagnosing-bugs (build), code-review (review), codebase-design and domain-modeling (GLOSSARY.md terms).`,
   `Commits, PR title, PR body blocks, comments: .claude/skills/super-board/references/writing-standard.md. Rewrite only your own PR body blocks, with .claude/bin/super-board-pr-body.sh.`,
   ...(lane === 'review' ? REVIEW_MEMORY : []),
   ...(lane === 'qa' && card.status === 'Ready'
@@ -164,22 +167,10 @@ const lanePrompt = (lane, card) => [
   `column = the column the card is in when you exit. detail = one line. Include prUrl/branch when they exist.`,
 ].join('\n')
 
-// Run-tier model ladders. Card complexity indexes into the active ladder;
-// undefined = inherit the session model (the strongest available — e.g.
-// Fable/Opus). Cards entering past Ready (cls null, never classified)
-// always inherit the session model.
-//   low    (run --low):  haiku / sonnet / opus
-//   medium (default):    sonnet / opus / session
-//   high   (run --high): opus for every card
-const LADDERS = {
-  low: { low: 'haiku', medium: 'sonnet', high: 'opus' },
-  medium: { low: 'sonnet', medium: 'opus', high: undefined },
-  high: { low: 'opus', medium: 'opus', high: 'opus' },
-}
-const ladder = LADDERS[input.tier || 'medium']
-const tierFor = (cls) => (cls ? ladder[cls.complexity] : undefined)
-// The classify router writes no code — haiku is fine except on --high runs.
-const classifyModel = (input.tier || 'medium') === 'high' ? 'sonnet' : 'haiku'
+// One model per lane, whatever the card or the run tier: haiku for routing and
+// preflight, sonnet to build and QA (TDD), opus to review.
+const LANE_MODEL = { build: 'sonnet', qa: 'sonnet', review: 'opus' }
+const classifyModel = 'haiku'
 
 const runLane = async (lane, card, model, history) => {
   if (halted) {
@@ -230,7 +221,7 @@ const PREFLIGHT_SCHEMA = {
   required: ['verdicts'],
 }
 const PREFLIGHT_BATCH = 5
-const preflightModel = (input.tier || 'medium') === 'low' ? 'haiku' : 'sonnet'
+const preflightModel = 'haiku'
 const preflightPrompt = (batch) => [
   READ_FAILURE,
   `Builder pre-flight for issues ${batch.map((c) => `#${c.number} ("${c.title}")`).join(', ')}. Config: ${input.configPath}.`,
@@ -308,7 +299,6 @@ const results = await pipeline(
   async (prev, card) => {
     const history = []
     if (halted) return { number: card.number, history: [{ lane: 'none', status: 'halted', column: card.status, detail: 'run halted; preserve current work and resume explicitly' }] }
-    const model = tierFor(prev && prev.cls)
     let at = card.status
 
     if (at === 'Ready' && readyLane(card) === 'build') {
@@ -316,7 +306,7 @@ const results = await pipeline(
         history.push(preflightExit(card))
         return { number: card.number, history }
       }
-      const b = await runLane('build', card, model, history)
+      const b = await runLane('build', card, LANE_MODEL.build, history)
       if (b.status !== 'advanced') return { number: card.number, history }
       at = 'QA'
     }
@@ -324,14 +314,14 @@ const results = await pipeline(
     // (run.md "Lanes and label routing").
     if (at === 'Ready' && readyLane(card) === 'qa') at = 'QA'
     if (at === 'QA') {
-      const q = await runLane('qa', card, model, history)
+      const q = await runLane('qa', card, LANE_MODEL.qa, history)
       if (q.status !== 'advanced') return { number: card.number, history }
       at = 'Review'
     }
     if (at === 'Review') {
-      // Reviewer always on session model. No lane-level serialisation: the merge
+      // No lane-level serialisation: the merge
       // gate holds the mutex for the merge alone (see the note above).
-      await runLane('review', card, undefined, history)
+      await runLane('review', card, LANE_MODEL.review, history)
     }
     return { number: card.number, history }
   }
