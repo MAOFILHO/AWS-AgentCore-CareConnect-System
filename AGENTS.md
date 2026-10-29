@@ -60,5 +60,6 @@ This repo is built partly by a software factory (Sandcastle + GitHub Actions).
 - The owner merges a PR the factory holds with `bash .sandcastle/merge.sh <pr>`. It refuses a draft, a `needs-human` PR and any check that is not green.
 - Self-improving: failed reviews travel back to the builder through the issue comments, and the builder reads `REVIEW.md` before it codes. The daily `factory-improve` workflow proposes `REVIEW.md` edits through a PR; the owner merges it, because those lines steer both reviewers. `REVIEW.md` holds the reviewer conventions.
 - Write issues with 2–5 checkable acceptance criteria; one issue = one PR under ~400 changed lines.
+- Supervisor mandate (owner, 2026-10-26): the owner is away from the keyboard. The supervising agent runs the factory alone, decides without asking, and keeps going until the product is done. The loop is Build (TDD), code review, PR QA review, merge; a failed review goes back to Build until it passes. It uses sub-agents where needed, learns from failed reviews, and uses Free Tier or the lowest-cost AWS options. The Safety rules, the permission system and the merge rules above still bind.
 - Agent rules: never build on `main`; one worktree and branch per task; never force-push except `--force-with-lease` on your own branch; never read `.env` or dump the environment.
 <!-- factory:end -->
