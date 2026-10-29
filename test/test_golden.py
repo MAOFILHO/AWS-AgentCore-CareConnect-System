@@ -377,6 +377,16 @@ class UnrelatedAnswerGoldenTest(unittest.TestCase):
         self.assertEqual(len(tickets.tickets), 1)
 
 
+class UrgentEscalationGoldenTest(unittest.TestCase):
+    def test_urgent_request_escalates_with_the_emergency_sentence_and_no_citations(self):
+        with mock.patch.object(supervisor_agent, "escalate", return_value={"ticket_id": "T1", "status": "pending_review"}):
+            out = supervisor_agent.supervisor_flow("I can't breathe", cost_meter=FakeCostMeter())
+        self.assertEqual(out["decision"], "escalate")
+        self.assertIn(supervisor_agent.EMERGENCY_NOTICE, out["draft_response"])
+        self.assertIn("T1", out["draft_response"])
+        self.assertEqual(supervisor_agent.api_result(out)["citations"], [])
+
+
 class UncitedAnswerGoldenTest(unittest.TestCase):
     def test_allowed_answer_with_no_approved_citation_escalates(self):
         passages = "Visiting hours are 11:00-20:00.\nSource:\ns3://docs/evaluation-untrusted/note.md"
