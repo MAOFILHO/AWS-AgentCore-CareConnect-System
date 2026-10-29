@@ -6,6 +6,9 @@ Visitor and patient parking is available in the multi-storey car park next to th
 ## Parking fees: how much does parking cost
 Parking is free for the first 2 hours. After 2 hours the fee is $3 per hour, up to $15 per day. Validate your parking ticket at reception to receive the free period.
 
+## Address: what is the full address
+Riverside Health, Main Hospital Site, 100 Riverside Drive, Riverside (an example address for this training project). Share this address with visitors, family and friends.
+
 ## Drop-off
 There is a short-stay drop-off zone outside the main entrance for setting down and picking up patients. Please do not leave vehicles unattended there.
 
@@ -15,7 +18,7 @@ Colour-coded signs guide you from the main entrance to each department. Voluntee
 ## Amenities
 A café and vending machines are near the main lobby. Cash machines are near the main entrance.
 
-## Free Wi-Fi: does the hospital offer free wifi for patients
+## Free Wi-Fi: is free wifi offered
 Free visitor Wi-Fi is available — select the guest network and accept the terms.
 
 ## Mobility support
