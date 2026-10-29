@@ -33,6 +33,13 @@ class AnswerSentencesTest(unittest.TestCase):
             with self.subTest(question=question):
                 self.assertIn(expected, "\n".join(answer_sentences(question, text)))
 
+    def test_waiting_time_answer_has_no_wording_the_guardrail_reads_as_triage(self):
+        emergency = (APPROVED / "emergency-and-urgent-care-info.md").read_text()
+        out = "\n".join(answer_sentences("What's the current waiting time for the emergency?", emergency))
+        self.assertIn("call main reception", out)
+        self.assertNotIn("medical need", out)
+        self.assertNotIn("911", out)
+
     def test_maternity_question_keeps_the_birth_partner_sentence(self):
         out = "\n".join(answer_sentences("What are the visiting rules for maternity?", VISITING))
         self.assertIn("birth partner", out)
