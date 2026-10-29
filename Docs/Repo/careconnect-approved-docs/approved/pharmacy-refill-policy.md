@@ -1,5 +1,8 @@
 # Prescription Refill Policy (Riverside Health — Approved, v2026-07)
 
+## How to request a refill
+To request a refill, send the request through the patient portal or contact the Riverside Health pharmacy listed in the contact directory. Give the name of the medicine as printed on your pharmacy label.
+
 ## Requesting a refill
 You may request a refill when you have refills remaining on an active prescription. Check how many refills remain in the patient portal or on your pharmacy label.
 
