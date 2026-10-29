@@ -9,6 +9,8 @@ A multi-agent patient-support assistant for the fictional **Riverside Health** h
 
 The system deploys from a clean checkout with one script and is built in part by an automated software factory (see [Software factory](#software-factory)). See `GLOSSARY.md` for the terms used here.
 
+> **Demo status:** the live demo was shut down on 2026-10-29 to stop AWS spend. The screenshots below show the last live build. To bring it back, run `scripts/deploy.sh` (about 30 minutes, see [Deploy](#deploy)).
+
 ## Why This Is Production-Grade
 
 This is a deployable system, not a notebook. Its safety properties are enforced in code and checked by tests:
